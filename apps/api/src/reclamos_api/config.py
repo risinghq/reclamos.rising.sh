@@ -8,6 +8,10 @@ DEFAULT_CARD_MODEL = "claude-sonnet-5-5"
 DEFAULT_DAILY_USD_CAP = 2.0
 # Set from the evaluation's refusal sweep; docs/cases.md gives the reason.
 DEFAULT_REFUSAL_MIN_SIMILARITY = 0.84
+# Searches one client address may send a minute; 0 turns the limit off.
+DEFAULT_SEARCHES_PER_MINUTE = 30
+# The Vite dev server.
+DEFAULT_WEB_ORIGINS = ("http://localhost:5173",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +29,8 @@ class Settings:
     card_model: str = DEFAULT_CARD_MODEL
     daily_usd_cap: float = DEFAULT_DAILY_USD_CAP
     refusal_min_similarity: float = DEFAULT_REFUSAL_MIN_SIMILARITY
+    web_origins: tuple[str, ...] = DEFAULT_WEB_ORIGINS
+    searches_per_minute: int = DEFAULT_SEARCHES_PER_MINUTE
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -43,7 +49,17 @@ class Settings:
             refusal_min_similarity=float(
                 os.environ.get("REFUSAL_MIN_SIMILARITY", DEFAULT_REFUSAL_MIN_SIMILARITY)
             ),
+            web_origins=_origins(os.environ.get("WEB_ORIGINS")),
+            searches_per_minute=int(
+                os.environ.get("SEARCHES_PER_MINUTE", DEFAULT_SEARCHES_PER_MINUTE)
+            ),
         )
+
+
+def _origins(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return DEFAULT_WEB_ORIGINS
+    return tuple(origin.strip() for origin in value.split(",") if origin.strip())
 
 
 def _database_url() -> str:

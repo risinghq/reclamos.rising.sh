@@ -85,3 +85,26 @@ bun x vercel deploy --prod
 ```
 
 The linked project metadata is local and ignored by Git.
+
+The page calls the API from the visitor's browser. Set `VITE_API_URL` in the
+Vercel project to the API's address, such as `https://api.reclamos.example`.
+Vite reads it at build time, and the default is `http://localhost:8000`. The API
+answers a browser only from an origin in `WEB_ORIGINS`, so set the Terraform
+variable `web_origins` to the web app's addresses. The browser calls the API
+directly, with no rewrite through Vercel, so the API sees each visitor's
+address.
+
+## Rate limit
+
+`POST /search` and `POST /cases` share one limit per client address:
+`SEARCHES_PER_MINUTE` requests a minute, 30 by default, refilled evenly. Past it
+they answer 429 with `Retry-After`. Each search embeds the query on the API's
+CPU, so the limit keeps one client from slowing every other visitor. No route
+calls a language model, so it does not guard spend.
+
+The count lives in the API process. With one API task it is exact, and with
+several each task counts on its own. The client address is the one uvicorn
+resolves: behind the load balancer, Terraform sets `FORWARDED_ALLOW_IPS` to the
+VPC's range, so uvicorn reads the address the load balancer appended to
+`X-Forwarded-For`. A client cannot forge it, because uvicorn skips only the
+trusted addresses from the right.
