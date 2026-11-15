@@ -76,6 +76,11 @@ On a pilot of 10 cards (2026-11-15), 82% of points were served. Most of the
 judge's errors were strict: it flagged points that their quote backs. A strict
 error hides a good point and never serves a bad one.
 
+The full run (2026-11-15) wrote and judged 299 cards for US$9.45 in cards. The
+judge found 42 cards faithful (14%), and 1,924 of 2,309 points (83.3%) are
+served. A card the judge flags still serves its other points, so the share of
+faithful cards matters less than the share of served points.
+
 ## Commands
 
 The commands run on a host with `ANTHROPIC_API_KEY` set. Each model call goes
