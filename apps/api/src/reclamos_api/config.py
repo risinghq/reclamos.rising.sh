@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass, field
+from urllib.parse import quote
 
 DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 DEFAULT_JUDGE_MODEL = "claude-sonnet-5-5"
@@ -71,5 +72,9 @@ def _database_url() -> str:
     name = os.environ.get("DB_NAME", "reclamos")
     user = os.environ.get("DB_USER", "postgres")
     password = os.environ.get("DB_PASSWORD", "")
-    credentials = f"{user}:{password}" if password else user
+    # RDS generates passwords with characters such as '#' and ':' that end a
+    # URL's credentials, so both parts are percent-encoded.
+    credentials = quote(user, safe="")
+    if password:
+        credentials += ":" + quote(password, safe="")
     return f"postgresql://{credentials}@{host}:{port}/{name}"
