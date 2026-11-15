@@ -13,8 +13,10 @@ infra -> AWS ECS, RDS, S3, ECR, IAM
 ```
 
 `apps/api/src/reclamos_api/main.py` creates the FastAPI application and owns the
-`/health` route. `db.py` owns the asyncpg startup boundary, and `health.py`
-checks PostgreSQL and the rqueue jobs table separately.
+`/health` route. `ratelimit.py` limits how often one client may search; see
+[operations](operations.md#rate-limit). `db.py` owns the asyncpg startup
+boundary, and `health.py` checks PostgreSQL and the rqueue jobs table
+separately.
 
 `apps/api/src/reclamos_api/worker.py` registers the worker process. It shares
 the API package for the same database and queue configuration. It uses rqueue's
@@ -51,9 +53,11 @@ the search results by resolution and attaches each served card, and `api.py` is
 `POST /cases`. No route calls a model. [Cases](cases.md) describes the threshold
 and the response.
 
-`apps/web/src/App.tsx` is the Spanish placeholder page. Vite builds it as a
-static client. `apps/web/vercel.json` owns the Vercel change filter for this
-workspace.
+`apps/web/src/App.tsx` is the Spanish search page. It sends the visitor's
+problem to `POST /cases` through `api.ts` and shows each case with
+`CaseCard.tsx`. `labels.ts` holds the Spanish names of claim types, outcomes and
+card fields. Vite builds it as a static client. `apps/web/vercel.json` owns the
+Vercel change filter for this workspace.
 
 `packages/eval/src/reclamos_eval/retrieval.py` scores a ranking of resolutions
 (recall, MRR and nDCG), `questions.py` reads the judged question set,

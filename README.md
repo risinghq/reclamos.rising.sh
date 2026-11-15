@@ -18,9 +18,9 @@ Start the complete local stack:
 docker compose up --build
 ```
 
-Run `bun run --cwd apps/web dev` for the Spanish placeholder web page at
-<http://localhost:5173>. The API health check is available at
-<http://localhost:8000/health>.
+Run `bun run --cwd apps/web dev` for the Spanish search page at
+<http://localhost:5173>. It calls the API at <http://localhost:8000>. The API
+health check is available at <http://localhost:8000/health>.
 
 The repository contains the FastAPI service in `apps/api`, the React web app in
 `apps/web`, the evaluation package in `packages/eval`, and AWS Terraform in

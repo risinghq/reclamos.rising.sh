@@ -38,6 +38,10 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_HOST", value = aws_db_instance.main.address },
         { name = "DB_NAME", value = var.db_name },
         { name = "DB_USER", value = var.db_username },
+        { name = "WEB_ORIGINS", value = join(",", var.web_origins) },
+        # Only the load balancer reaches the task, so uvicorn takes each
+        # visitor's address from the X-Forwarded-For it appends.
+        { name = "FORWARDED_ALLOW_IPS", value = aws_vpc.main.cidr_block },
       ]
       secrets = [{ name = "DB_PASSWORD", valueFrom = "${local.db_secret}:password::" }]
       logConfiguration = {

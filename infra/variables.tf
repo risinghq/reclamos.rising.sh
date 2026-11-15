@@ -27,6 +27,11 @@ variable "api_domain_name" {
   description = "Public DNS name for the Reclamos API, covered by its ACM certificate."
 }
 
+variable "web_origins" {
+  type        = list(string)
+  description = "Origins of the web app, such as https://reclamos.example, allowed to call the API from a browser."
+}
+
 variable "route53_zone_name" {
   type        = string
   description = "Public Route53 hosted zone containing api_domain_name."

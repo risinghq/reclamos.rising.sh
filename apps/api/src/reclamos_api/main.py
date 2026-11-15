@@ -1,12 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from reclamos_api.cases.api import router as cases_router
 from reclamos_api.config import Settings
 from reclamos_api.db import database_pool
 from reclamos_api.health import dependency_health
+from reclamos_api.ratelimit import RateLimiter, rate_limited
 from reclamos_api.retrieval.api import router as search_router
 from reclamos_api.retrieval.embedder import Embedder, embedder_from_settings
 
@@ -26,10 +28,24 @@ async def lifespan(app: FastAPI):
 
 def create_app(embedder: Embedder | None = None) -> FastAPI:
     """`embedder` replaces the configured model, for tests."""
+    settings = Settings.from_environment()
     app = FastAPI(title="Reclamos API", lifespan=lifespan)
     app.state.embedder = embedder
-    app.include_router(search_router)
-    app.include_router(cases_router)
+    app.state.rate_limiter = (
+        RateLimiter(settings.searches_per_minute)
+        if settings.searches_per_minute > 0
+        else None
+    )
+    # The web app calls the API from its own origin. A rewrite through the web
+    # host would hide each visitor's address from the API.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.web_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["content-type"],
+    )
+    for router in (search_router, cases_router):
+        app.include_router(router, dependencies=[Depends(rate_limited)])
 
     @app.get("/health")
     async def health(request: Request) -> JSONResponse:
