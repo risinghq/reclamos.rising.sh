@@ -23,7 +23,7 @@ cannot be split further, so it is recorded in `listing_failures` with the reason
 Requests are one per second per process, and each says who asks:
 
 ```text
-reclamos-corpus/0.1 (+https://github.com/totallynotdavid/reclamos)
+reclamos-corpus/0.1 (+https://github.com/risinghq/reclamos.rising.sh)
 ```
 
 Redirects are followed by hand, up to 5. Each hop is checked against the

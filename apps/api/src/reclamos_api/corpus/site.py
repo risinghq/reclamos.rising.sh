@@ -13,7 +13,7 @@ import httpx
 from reclamos_api.corpus.parse import MONTHS
 from selectolax.lexbor import LexborHTMLParser
 
-USER_AGENT = "reclamos-corpus/0.1 (+https://github.com/totallynotdavid/reclamos)"
+USER_AGENT = "reclamos-corpus/0.1 (+https://github.com/risinghq/reclamos.rising.sh)"
 SITE = "https://www.gob.pe"
 COLLECTION_URL = f"{SITE}/institucion/osiptel/colecciones/52616-jurisprudencia"
 PAGE_SIZE = 100
