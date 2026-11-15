@@ -142,8 +142,11 @@ The linked project metadata is local and ignored by Git.
 
 The page calls the API from the visitor's browser. Set `VITE_API_URL` in the
 Vercel project to the API's address, such as `https://api.reclamos.example`.
-Vite reads it at build time, and the default is `http://localhost:8000`. The API
-answers a browser only from an origin in `WEB_ORIGINS`, so set the Terraform
+Vite reads it at build time, and the default is `http://localhost:8000`.
+`apps/web/vercel.json` skips a build when the push leaves `apps/web` and
+`bun.lock` unchanged, so a changed variable reaches the site only through a
+redeploy from the dashboard with "Use project's Ignore Build Step" cleared. The
+API answers a browser only from an origin in `WEB_ORIGINS`, so set the Terraform
 variable `web_origins` to the web app's addresses. The browser calls the API
 directly, with no rewrite through Vercel, so the API sees each visitor's
 address.
