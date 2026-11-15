@@ -70,8 +70,9 @@ index. [Evaluation](evaluation.md) describes the commands.
 
 `infra/` defines the AWS deployment: an HTTPS application load balancer, ECS
 Fargate task definitions and services for the API and worker, PostgreSQL RDS, an
-S3 PDF bucket, ECR, and the IAM roles those services need. Terraform uses an S3
-backend with native S3 locking; applying it is an operator action.
+S3 PDF bucket, ECR, the IAM roles those services need, and the API's DNS records
+on Cloudflare. Terraform uses an S3 backend with native S3 locking; applying it
+is an operator action.
 
 ## Corpus state
 
