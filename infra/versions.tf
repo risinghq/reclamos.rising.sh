@@ -1,8 +1,9 @@
 terraform {
   required_version = ">= 1.14.0"
 
+  # S3 bucket names are global, so each account passes its own bucket to
+  # terraform init; docs/operations.md gives the command.
   backend "s3" {
-    bucket       = "reclamos-terraform-state"
     key          = "reclamos/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true

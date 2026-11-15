@@ -71,6 +71,53 @@ against a `pgvector/pgvector:pg18` service. The gate fails when fused recall@5
 on the fixed index drops more than 2 points below the committed baseline; see
 [evaluation](evaluation.md#gate).
 
+## AWS deploy
+
+`infra/` is applied by hand. Sign the AWS CLI in with your console session.
+`aws login` keeps temporary credentials for up to 12 hours, and `--remote`
+prints a URL to open on a device with a browser. Terraform reads them through a
+`credential_process` profile:
+
+```ini
+# ~/.aws/config
+[profile reclamos-login]
+region = us-east-1
+
+[profile reclamos]
+credential_process = aws configure export-credentials --profile reclamos-login --format process
+region = us-east-1
+```
+
+```console
+aws login --remote --profile reclamos-login
+export AWS_PROFILE=reclamos
+```
+
+S3 bucket names are global, so the state bucket's name carries the account ID
+and is passed to `terraform init`. Create it once, with versioning, before the
+first init:
+
+```console
+BUCKET=reclamos-terraform-state-$(aws sts get-caller-identity --query Account --output text)
+aws s3api create-bucket --bucket "$BUCKET"
+aws s3api put-bucket-versioning --bucket "$BUCKET" --versioning-configuration Status=Enabled
+terraform -chdir=infra init -backend-config=bucket="$BUCKET"
+```
+
+The task definitions name an image tag, so the first apply creates the
+repository alone, then the image is pushed with the commit as its tag:
+
+```console
+terraform -chdir=infra apply -target=aws_ecr_repository.api
+docker build -f apps/api/Dockerfile -t REPOSITORY:COMMIT .
+docker push REPOSITORY:COMMIT
+terraform -chdir=infra apply -var api_image_tag=COMMIT
+```
+
+Both applies need `api_domain_name`, `route53_zone_name` and `web_origins`,
+which have no default. The repository uses none of them, so the first apply
+accepts any value.
+
 ## Web deploy
 
 The web app is the Vercel project `web`, which deploys each push to `master`
