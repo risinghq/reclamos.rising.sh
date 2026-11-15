@@ -42,9 +42,9 @@ spend limit, and `quotes.py` checks that a quote is in its text.
 
 `apps/api/src/reclamos_api/cards/` writes one case card per resolution offline,
 through those spend limits: `card.py` builds the prompt and checks each quote
-against the body, `judge.py` reads each field against its quotes,
-`repository.py` owns the `cards` table, and `commands.py` is `reclamos cards`.
-[Cards](cards.md) describes the check and the commands.
+against the body, `judge.py` reads each point against its quote, `repository.py`
+owns the `cards` table, and `commands.py` is `reclamos cards`. [Cards](cards.md)
+describes the check and the commands.
 
 `apps/api/src/reclamos_api/cases/` serves the visitor route: `find.py` groups
 the search results by resolution and attaches each served card, and `api.py` is
