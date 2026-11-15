@@ -114,9 +114,16 @@ docker push REPOSITORY:COMMIT
 terraform -chdir=infra apply -var api_image_tag=COMMIT
 ```
 
-Both applies need `api_domain_name`, `route53_zone_name` and `web_origins`,
+Both applies need `api_domain_name`, `cloudflare_zone_name` and `web_origins`,
 which have no default. The repository uses none of them, so the first apply
 accepts any value.
+
+DNS is on Cloudflare. Terraform writes the certificate's validation record and
+the API's CNAME to the load balancer, so the full apply needs
+`CLOUDFLARE_API_TOKEN`, a token with DNS edit on the zone. Both records are DNS
+only: through Cloudflare's proxy, the load balancer would see Cloudflare's
+addresses, and the [rate limit](#rate-limit) would count every visitor as a few
+clients.
 
 ## Web deploy
 

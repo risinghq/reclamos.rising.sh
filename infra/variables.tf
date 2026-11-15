@@ -38,9 +38,9 @@ variable "worker_count" {
   description = "Worker tasks to run. Set 1 while a crawl runs; the worker idles otherwise."
 }
 
-variable "route53_zone_name" {
+variable "cloudflare_zone_name" {
   type        = string
-  description = "Public Route53 hosted zone containing api_domain_name."
+  description = "Cloudflare zone containing api_domain_name."
 }
 
 variable "api_image_tag" {

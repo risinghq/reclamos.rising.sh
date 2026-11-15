@@ -15,9 +15,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
   }
 }
 
 provider "aws" {
   region = var.aws_region
 }
+
+# Reads CLOUDFLARE_API_TOKEN, a token with DNS edit on the zone.
+provider "cloudflare" {}
