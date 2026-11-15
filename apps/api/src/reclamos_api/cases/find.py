@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from reclamos_api.cards import repository
-from reclamos_api.cards.card import Field
+from reclamos_api.cards.card import Points
 from reclamos_api.retrieval.embedder import Embedder
 from reclamos_api.retrieval.search import NO_FILTERS, Filters, Hit, search
 
@@ -24,7 +24,7 @@ class Case:
     # The resolution's best passage, which carries its parse fields.
     passage: Hit
     similarity: float
-    card: dict[str, Field] | None
+    card: dict[str, Points] | None
 
 
 async def find_cases(

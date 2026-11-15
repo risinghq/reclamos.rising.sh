@@ -28,9 +28,9 @@ class Passage(BaseModel):
     text: str
 
 
-class CardField(BaseModel):
+class CardPoint(BaseModel):
     text: str
-    quotes: list[str]
+    quote: str
 
 
 class FoundCase(BaseModel):
@@ -44,9 +44,9 @@ class FoundCase(BaseModel):
     url: str
     similarity: float
     passage: Passage
-    # Absent until the resolution has a judged card. Each field is one the
-    # judge found backed by its quotes.
-    card: dict[str, CardField] | None
+    # Absent until the resolution has a judged card. Each point is one the
+    # judge found backed by its quote.
+    card: dict[str, list[CardPoint]] | None
 
 
 class CasesResponse(BaseModel):
@@ -103,7 +103,7 @@ def _found_case(case: Case) -> FoundCase:
         card=None
         if case.card is None
         else {
-            name: CardField(text=value.text, quotes=list(value.quotes))
-            for name, value in case.card.items()
+            name: [CardPoint(text=point.text, quote=point.quote) for point in points]
+            for name, points in case.card.items()
         },
     )

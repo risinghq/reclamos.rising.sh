@@ -124,7 +124,8 @@ CREATE INDEX IF NOT EXISTS llm_calls_started_idx ON llm_calls (started_at);
 -- (cards/). `fields` and `readings` hold only what passed the quote check;
 -- `rejected` holds the rest. A card is current while `prompt_version` and
 -- `body_sha256` match the prompt and the body it was written from.
--- `unsupported` is null until the card is judged.
+-- `unsupported` is null until the card is judged. A verdict is current while
+-- `judge_version` matches the judge's prompt.
 CREATE TABLE IF NOT EXISTS cards (
     resolution_id bigint PRIMARY KEY REFERENCES resolutions (id) ON DELETE CASCADE,
     prompt_version text NOT NULL,
@@ -136,6 +137,7 @@ CREATE TABLE IF NOT EXISTS cards (
     usd numeric NOT NULL CHECK (usd >= 0),
     written_at timestamptz NOT NULL DEFAULT now(),
     judge_model text,
+    judge_version text,
     unsupported jsonb,
     judged_at timestamptz
 );

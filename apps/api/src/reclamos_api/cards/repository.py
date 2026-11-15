@@ -5,7 +5,8 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from reclamos_api.cards.card import PROMPT_VERSION, Card, Field
+from reclamos_api.cards.card import PROMPT_VERSION, Card, Point, Points
+from reclamos_api.cards.judge import JUDGE_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,7 @@ async def save_card(
             usd = excluded.usd,
             written_at = now(),
             judge_model = NULL,
+            judge_version = NULL,
             unsupported = NULL,
             judged_at = NULL
         """,
@@ -63,59 +65,69 @@ async def save_card(
         PROMPT_VERSION,
         source.body_sha256,
         model,
-        json.dumps({name: asdict(f) for name, f in card.fields.items()}),
+        json.dumps(
+            {
+                name: [asdict(point) for point in points]
+                for name, points in card.fields.items()
+            }
+        ),
         json.dumps({name: asdict(r) for name, r in card.readings.items()}),
         json.dumps(card.rejected),
         usd,
     )
 
 
-async def unjudged(connection: Any) -> list[tuple[int, dict[str, Field]]]:
-    """Cards with at least one field and no verdict, smallest id first."""
+def card_fields(stored: str) -> dict[str, Points]:
+    """The fields of a card as `save_card` stored them."""
+    return {
+        name: tuple(Point(point["text"], point["quote"]) for point in points)
+        for name, points in json.loads(stored).items()
+    }
+
+
+async def unjudged(connection: Any) -> list[tuple[int, dict[str, Points]]]:
+    """Current cards with at least one field and no current verdict, smallest
+    id first."""
     rows = await connection.fetch(
         """
         SELECT resolution_id, fields FROM cards
-        WHERE judged_at IS NULL AND fields <> '{}'::jsonb
+        WHERE judge_version IS DISTINCT FROM $2
+          AND fields <> '{}'::jsonb AND prompt_version = $1
         ORDER BY resolution_id
-        """
+        """,
+        PROMPT_VERSION,
+        JUDGE_VERSION,
     )
-    return [
-        (
-            row["resolution_id"],
-            {
-                name: Field(value["text"], tuple(value["quotes"]))
-                for name, value in json.loads(row["fields"]).items()
-            },
-        )
-        for row in rows
-    ]
+    return [(row["resolution_id"], card_fields(row["fields"])) for row in rows]
 
 
 async def save_verdict(
     connection: Any,
     resolution_id: int,
-    unsupported: list[dict[str, str]],
+    unsupported: list[dict[str, Any]],
     *,
     judge_model: str,
 ) -> None:
     await connection.execute(
         """
         UPDATE cards
-        SET judge_model = $2, unsupported = $3::jsonb, judged_at = now()
+        SET judge_model = $2, judge_version = $3, unsupported = $4::jsonb,
+            judged_at = now()
         WHERE resolution_id = $1
         """,
         resolution_id,
         judge_model,
+        JUDGE_VERSION,
         json.dumps(unsupported),
     )
 
 
 async def served_fields(
     connection: Any, resolution_ids: list[int]
-) -> dict[int, dict[str, Field]]:
-    """The fields a visitor may read, by resolution. A card serves only while it
-    is current and judged, and only the fields the judge found no unsupported
-    claim in."""
+) -> dict[int, dict[str, Points]]:
+    """The points a visitor may read, by resolution. A card serves only while it
+    and its verdict are current, and only the points the judge did not flag. A
+    field with no point left is not served."""
     rows = await connection.fetch(
         """
         SELECT c.resolution_id, c.fields, c.unsupported
@@ -123,19 +135,26 @@ async def served_fields(
         WHERE c.resolution_id = ANY($1::bigint[])
           AND c.prompt_version = $2
           AND c.body_sha256 = encode(sha256(convert_to(r.body, 'UTF8')), 'hex')
-          AND c.judged_at IS NOT NULL
+          AND c.judge_version = $3
         """,
         resolution_ids,
         PROMPT_VERSION,
+        JUDGE_VERSION,
     )
-    served: dict[int, dict[str, Field]] = {}
+    served: dict[int, dict[str, Points]] = {}
     for row in rows:
-        flagged = {item["field"] for item in json.loads(row["unsupported"])}
-        fields = {
-            name: Field(value["text"], tuple(value["quotes"]))
-            for name, value in json.loads(row["fields"]).items()
-            if name not in flagged
+        flagged = {
+            (item["field"], item["point"]) for item in json.loads(row["unsupported"])
         }
+        fields: dict[str, Points] = {}
+        for name, points in card_fields(row["fields"]).items():
+            kept = tuple(
+                point
+                for number, point in enumerate(points, start=1)
+                if (name, number) not in flagged
+            )
+            if kept:
+                fields[name] = kept
         if fields:
             served[row["resolution_id"]] = fields
     return served
@@ -146,7 +165,7 @@ async def report_rows(connection: Any) -> list[Any]:
     return await connection.fetch(
         """
         SELECT c.resolution_id, c.prompt_version, c.fields, c.readings, c.rejected,
-               c.usd::float8 AS usd, c.unsupported,
+               c.usd::float8 AS usd, c.judge_version, c.unsupported,
                r.outcome, r.operator, r.resolved_on
         FROM cards c JOIN resolutions r ON r.id = c.resolution_id
         ORDER BY c.resolution_id

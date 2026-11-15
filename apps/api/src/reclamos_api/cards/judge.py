@@ -1,14 +1,16 @@
-"""Judge whether each field of a card says only what its quotes say.
+"""Judge whether each point of a card says only what its quote says.
 
-The quotes passed the check against the body, so a field its quotes back is
-backed by the resolution. The judge reads the fields and their quotes only,
+The quotes passed the check against the body, so a point its quote backs is
+backed by the resolution. The judge reads the points and their quotes only,
 not the whole body.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any, cast
 
-from reclamos_api.cards.card import FIELDS, Field
+from reclamos_api.cards.card import FIELDS, Points
 from reclamos_api.llm.client import LanguageModel, Prompt
 from reclamos_api.llm.spend import Budget, Ledger
 
@@ -17,19 +19,24 @@ MAX_JUDGE_TOKENS = 1_000
 SYSTEM = """\
 Revisas fichas escritas a partir de resoluciones del TRASU de OSIPTEL.
 
-Cada campo de la ficha tiene un texto y citas copiadas de la resolución:
+Cada campo de la ficha tiene puntos numerados. Un punto es una oración y la \
+cita de la resolución que la respalda. Los campos son:
 - claim: qué reclamó el usuario y qué pidió.
 - operator_position: qué dijo o decidió la empresa operadora antes de la \
 apelación o la queja.
 - reasoning: por qué el tribunal decidió lo que decidió.
 - evidence: la prueba que decidió el caso, o la prueba que faltó.
 
-Un campo es fiel cuando cada afirmación de su texto está en sus citas y la \
-atribuye a quien la dijo en ellas: el usuario, la empresa o el tribunal. \
-Conocimiento que no está en las citas no lo respalda, aunque sea cierto.
+Un punto es fiel cuando todo lo que afirma su oración está en su propia cita \
+y lo atribuye a quien lo dijo en ella: el usuario, la empresa o el tribunal. \
+Otra cita no lo respalda. Conocimiento que no está en la cita tampoco, aunque \
+sea cierto. Decir lo mismo con otras palabras, más corto o más sencillo, sí \
+es fiel. Omitir detalles de la cita también es fiel.
 
-En "unsupported" pon, por cada afirmación que sus citas no respaldan, el \
-campo y la afirmación copiada. Si todo es fiel, deja "unsupported" vacío.
+En "unsupported" pon solo los puntos que no son fieles: el campo, su número y \
+en "claim" las palabras de la oración, copiadas tal cual, que su cita no \
+respalda. Un punto que su cita respalda no va en la lista, ni siquiera con \
+una nota. Si todos son fieles, deja "unsupported" vacío. Escribe en español.
 """
 
 SCHEMA: dict[str, Any] = {
@@ -41,9 +48,10 @@ SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "field": {"type": "string", "enum": list(FIELDS)},
+                    "point": {"type": "integer"},
                     "claim": {"type": "string"},
                 },
-                "required": ["field", "claim"],
+                "required": ["field", "point", "claim"],
                 "additionalProperties": False,
             },
         }
@@ -52,11 +60,18 @@ SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+# A verdict given with another prompt or schema is out of date.
+JUDGE_VERSION = hashlib.sha256(
+    (SYSTEM + json.dumps(SCHEMA, sort_keys=True)).encode()
+).hexdigest()[:12]
+
 
 @dataclass(frozen=True, slots=True)
 class CardVerdict:
-    # None when the judge's reply could not be read.
-    unsupported: list[dict[str, str]] | None
+    # Each point the judge found unsupported: its field, its number counted
+    # from 1, and the claim its quote does not back. None when the judge's
+    # reply could not be read.
+    unsupported: list[dict[str, Any]] | None
     usd: float
 
 
@@ -64,7 +79,7 @@ async def judge_card(
     ledger: Ledger,
     model: LanguageModel,
     judge_model: str,
-    fields: dict[str, Field],
+    fields: dict[str, Points],
     *,
     budget: Budget | None = None,
 ) -> CardVerdict:
@@ -84,23 +99,25 @@ async def judge_card(
     items: Any = None if reply is None else reply.get("unsupported")
     if metered.completion.stop_reason == "max_tokens" or not isinstance(items, list):
         return CardVerdict(None, metered.usd)
-    claims = [
+    entries = [
         cast("dict[str, Any]", item)
         for item in cast("list[Any]", items)
         if isinstance(item, dict)
     ]
     unsupported = [
-        {"field": str(claim.get("field", "")), "claim": str(claim.get("claim", ""))}
-        for claim in claims
+        {
+            "field": str(entry.get("field", "")),
+            "point": entry.get("point"),
+            "claim": str(entry.get("claim", "")),
+        }
+        for entry in entries
     ]
     return CardVerdict(unsupported, metered.usd)
 
 
-def card_text(fields: dict[str, Field]) -> str:
+def card_text(fields: dict[str, Points]) -> str:
     blocks: list[str] = []
     for name in FIELDS:
-        if name not in fields:
-            continue
-        quotes = "\n".join(f"- «{quote}»" for quote in fields[name].quotes)
-        blocks.append(f"{name}: {fields[name].text}\nCitas:\n{quotes}")
+        for number, point in enumerate(fields.get(name, ()), start=1):
+            blocks.append(f"{name} {number}: {point.text}\nCita: «{point.quote}»")
     return "\n\n".join(blocks)

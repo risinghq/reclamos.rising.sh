@@ -11,10 +11,10 @@ from typing import Any
 
 from reclamos_api.cards import repository
 from reclamos_api.cards.card import FIELDS, PROMPT_VERSION, Unreadable, write_card
-from reclamos_api.cards.judge import judge_card
+from reclamos_api.cards.judge import JUDGE_VERSION, judge_card
 from reclamos_api.config import Settings
 from reclamos_api.db import database_pool
-from reclamos_api.llm.client import LanguageModel
+from reclamos_api.llm.client import LanguageModel, NotBilled
 from reclamos_api.llm.quotes import normalize
 from reclamos_api.llm.spend import Budget, Ledger, SpendRefused
 
@@ -72,7 +72,7 @@ async def judge(
     budget_usd: float,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> str:
-    """Judge every card that has no verdict."""
+    """Judge every current card that has no current verdict."""
     budget = Budget(budget_usd)
     unread: list[int] = []
     judged = 0
@@ -114,8 +114,12 @@ async def judge(
 async def _run_all[T](
     items: Sequence[T], work: Callable[[T], Awaitable[None]], concurrency: int
 ) -> str | None:
-    """Run `work` on each item, `concurrency` at a time. The first refused call
-    stops new work; calls in flight finish. Returns the refusal."""
+    """Run `work` on each item, `concurrency` at a time. The first call refused
+    by the spend limits or by the provider stops new work; calls in flight
+    finish. Returns the refusal.
+
+    A provider refusal, such as its usage limit, would refuse every later call
+    too, and the next run picks up where this one stopped."""
     pending = iter(items)
     stopped: str | None = None
 
@@ -128,6 +132,9 @@ async def _run_all[T](
                 await work(item)
             except SpendRefused as refused:
                 stopped = stopped or str(refused)
+                return
+            except NotBilled as refused:
+                stopped = stopped or f"the provider refused: {refused}"
                 return
 
     await asyncio.gather(*(worker() for _ in range(concurrency)))
@@ -148,22 +155,28 @@ async def report(settings: Settings) -> str:
 
 
 def format_report(rows: Sequence[Any]) -> str:
-    fields: Counter[str] = Counter()
-    dropped_quotes = dropped_fields = dropped_readings = 0
+    """Counts over the current cards and their current verdicts. A stale card
+    is counted, not read: its prompt may have stored another shape."""
+    current = [row for row in rows if row["prompt_version"] == PROMPT_VERSION]
+    points: Counter[str] = Counter()
+    dropped_points = dropped_readings = 0
     disagree: list[str] = []
     filled: list[str] = []
-    judged = faithful = 0
+    judged = faithful = judged_points = 0
     unsupported: Counter[str] = Counter()
-    for row in rows:
-        card_fields = json.loads(row["fields"])
-        fields.update(card_fields.keys())
+    for row in current:
+        card_points = Counter(
+            {
+                name: len(field)
+                for name, field in repository.card_fields(row["fields"]).items()
+            }
+        )
+        points.update(card_points)
         for entry in json.loads(row["rejected"]):
             if "reading" in entry:
                 dropped_readings += 1
-            elif "quote" in entry:
-                dropped_quotes += 1
             else:
-                dropped_fields += 1
+                dropped_points += 1
         readings = json.loads(row["readings"])
         for name, parsed in (
             ("outcome", row["outcome"]),
@@ -179,24 +192,30 @@ def format_report(rows: Sequence[Any]) -> str:
                 disagree.append(
                     f"{row['resolution_id']} {name}: parse {parsed}, card {read}"
                 )
-        if row["unsupported"] is not None:
+        if row["judge_version"] == JUDGE_VERSION:
             judged += 1
-            claims = json.loads(row["unsupported"])
-            faithful += not claims
-            unsupported.update(claim["field"] for claim in claims)
-    current = sum(row["prompt_version"] == PROMPT_VERSION for row in rows)
+            judged_points += card_points.total()
+            flagged = {
+                (item["field"], item["point"])
+                for item in json.loads(row["unsupported"])
+            }
+            faithful += not flagged
+            unsupported.update(name for name, _ in flagged)
+    served = judged_points - unsupported.total()
     lines = [
-        f"cards: {len(rows)} ({current} current), US${sum(r['usd'] for r in rows):.4f}",
-        "fields: " + ", ".join(f"{name} {fields[name]}" for name in FIELDS),
-        f"dropped: {dropped_quotes} quotes, {dropped_fields} fields with no quote"
-        f" left, {dropped_readings} readings",
+        f"cards: {len(rows)} ({len(current)} current),"
+        f" US${sum(r['usd'] for r in rows):.4f}",
+        "points: " + ", ".join(f"{name} {points[name]}" for name in FIELDS),
+        f"dropped: {dropped_points} points, {dropped_readings} readings",
         f"judged: {judged}, faithful {faithful}"
         + (f" ({faithful / judged:.1%})" if judged else ""),
-        "unsupported by field: "
+        "unsupported points by field: "
         + (
             ", ".join(f"{n} {unsupported[n]}" for n in FIELDS if unsupported[n])
             or "none"
         ),
+        f"points served: {served} of {judged_points} judged"
+        + (f" ({served / judged_points:.1%})" if judged_points else ""),
         f"disagreements with parse: {len(disagree)}",
         *(f"  {line}" for line in disagree),
         f"readings where parse has none: {len(filled)}",

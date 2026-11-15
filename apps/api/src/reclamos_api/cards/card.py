@@ -1,9 +1,11 @@
 """Write one resolution's case card with a language model, and check it.
 
 A card holds four fields a reader needs to compare their case with this one,
-and the model's own reading of the outcome, the operator and the date. Each
-field and reading carries quotes from the body. A quote that is not in the body
-word for word is dropped, and a field with no quote left is dropped with it.
+and the model's own reading of the outcome, the operator and the date. A field
+is a few points, each one sentence with the quote from the body that says it,
+so a reader can check every sentence against its own quote. A point whose quote
+is not in the body is dropped, and a field with no point left is dropped with
+it.
 """
 
 import hashlib
@@ -20,8 +22,8 @@ from reclamos_api.llm.spend import Budget, Ledger
 MAX_CARD_PROMPT_CHARS = 60_000
 MAX_CARD_TOKENS = 3_000
 CARD_TIMEOUT_S = 180.0
-# Quotes kept per field. More would make the card harder to read, not truer.
-MAX_QUOTES = 3
+# Points kept per field. More would make the card harder to read, not truer.
+MAX_POINTS = 3
 
 FIELDS = ("claim", "operator_position", "reasoning", "evidence")
 READINGS = ("outcome", "operator", "resolved_on")
@@ -39,22 +41,31 @@ Lees resoluciones del TRASU, el tribunal de OSIPTEL que resuelve las \
 apelaciones y quejas de usuarios de telecomunicaciones del Perú. De cada \
 resolución escribes una ficha para que un usuario compare su caso con este.
 
-Campos de la ficha, cada uno en una o dos oraciones de español sencillo:
+Campos de la ficha:
 - claim: qué reclamó el usuario y qué pidió.
 - operator_position: qué dijo o decidió la empresa operadora antes de la \
 apelación o la queja.
 - reasoning: por qué el tribunal decidió lo que decidió.
 - evidence: la prueba que decidió el caso, o la prueba que faltó.
 
+Cada campo es una lista de uno a tres puntos, del más importante al menos \
+importante. Un punto tiene:
+- "quote": una cita del texto. Escríbela primero.
+- "text": una oración corta de español sencillo que dice lo que dice esa cita.
+
 Reglas:
 - Usa solo el texto de la resolución. No uses otro conocimiento.
-- Cada campo dice solo lo que dicen sus citas. No agregues motivos, detalles \
-ni consejos.
-- Atribuye cada cosa a quien la dijo: el usuario, la empresa o el tribunal.
-- Cada cita copia, carácter por carácter, una o dos oraciones del texto. No \
-corrijas errores de escritura ni de OCR, y no cambies palabras.
-- Si el texto no dice algo que un campo pide, deja su "text" vacío y sus \
-"quotes" vacías.
+- Cada oración dice solo lo que dice su propia cita. Lo que la cita no dice no \
+va en la oración, aunque otra parte del texto lo diga: ni motivos, ni fechas, \
+ni montos, ni nombres, ni detalles, ni consejos.
+- Un punto dice un solo hecho. Dos hechos con dos citas son dos puntos.
+- Atribuye cada cosa a quien la dijo en la cita: el usuario, la empresa o el \
+tribunal.
+- Cada cita copia, carácter por carácter, de una a tres oraciones completas \
+del texto. Una cita que termina en dos puntos o a mitad de una idea no dice \
+nada: copia también lo que sigue. No corrijas errores de escritura ni de OCR, \
+y no cambies palabras.
+- Si el texto no dice algo que un campo pide, deja su lista vacía.
 
 Además lee del texto:
 - outcome: lo que el tribunal declaró sobre la apelación o la queja en la \
@@ -69,13 +80,14 @@ muestra, deja "value" y "quote" vacíos.
 
 def _field_schema() -> dict[str, Any]:
     return {
-        "type": "object",
-        "properties": {
-            "text": {"type": "string"},
-            "quotes": {"type": "array", "items": {"type": "string"}},
+        "type": "array",
+        "items": {
+            "type": "object",
+            # The quote comes first so the model writes the sentence from it.
+            "properties": {"quote": {"type": "string"}, "text": {"type": "string"}},
+            "required": ["quote", "text"],
+            "additionalProperties": False,
         },
-        "required": ["text", "quotes"],
-        "additionalProperties": False,
     }
 
 
@@ -107,9 +119,13 @@ PROMPT_VERSION = hashlib.sha256(
 
 
 @dataclass(frozen=True, slots=True)
-class Field:
+class Point:
     text: str
-    quotes: tuple[str, ...]
+    quote: str
+
+
+# A field's points, most important first.
+type Points = tuple[Point, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,10 +136,10 @@ class Reading:
 
 @dataclass(slots=True)
 class Card:
-    fields: dict[str, Field] = field(default_factory=dict[str, Field])
+    fields: dict[str, Points] = field(default_factory=dict[str, Points])
     readings: dict[str, Reading] = field(default_factory=dict[str, Reading])
-    # What the check dropped: quotes not in the body, fields left with no
-    # quote, and readings whose value or quote failed.
+    # What the check dropped: points with no text or with a quote not in the
+    # body, and readings whose value or quote failed.
     rejected: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
 
 
@@ -170,24 +186,20 @@ def check_card(reply: dict[str, Any], body: str) -> Card:
     """Keep what the body backs word for word."""
     card = Card()
     for name in FIELDS:
-        entry = _object(reply.get(name))
-        text = str(entry.get("text", "")).strip()
-        raw: Any = entry.get("quotes")
-        quotes = (
-            [str(q).strip() for q in cast("list[Any]", raw)]
-            if isinstance(raw, list)
-            else []
-        )
-        kept: list[str] = []
-        for quote in quotes:
-            if is_quoted(quote, body) and len(kept) < MAX_QUOTES:
-                kept.append(quote)
-            elif quote:
-                card.rejected.append({"field": name, "quote": quote})
-        if text and kept:
-            card.fields[name] = Field(text, tuple(kept))
-        elif text:
-            card.rejected.append({"field": name, "text": text})
+        raw: Any = reply.get(name)
+        entries = cast("list[Any]", raw) if isinstance(raw, list) else []
+        kept: list[Point] = []
+        for entry in map(_object, entries):
+            text = str(entry.get("text", "")).strip()
+            quote = str(entry.get("quote", "")).strip()
+            if not text and not quote:
+                continue
+            if text and is_quoted(quote, body) and len(kept) < MAX_POINTS:
+                kept.append(Point(text, quote))
+            else:
+                card.rejected.append({"field": name, "text": text, "quote": quote})
+        if kept:
+            card.fields[name] = tuple(kept)
     for name in READINGS:
         entry = _object(reply.get(name))
         value = str(entry.get("value", "")).strip()

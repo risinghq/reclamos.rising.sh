@@ -22,10 +22,11 @@ makes no model call: the cards were written and judged offline. The code is in
    `limit`.
 4. Attach each kept resolution's served card fields.
 
-A card is served while it is current and judged: its `prompt_version` matches
-the code, its `body_sha256` matches the body, and it has a verdict. A field the
-judge listed as unsupported is not served. A card with no field left is not
-served. A case without a served card still shows its best passage.
+A card is served while it and its verdict are current: its `prompt_version`
+matches the code, its `body_sha256` matches the body, and its `judge_version`
+matches the judge. A point the judge listed as unsupported is not served. A
+field with no point left is not served, and neither is a card with no field
+left. A case without a served card still shows its best passage.
 
 ## Route
 
@@ -57,8 +58,11 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
         "text": "..."
       },
       "card": {
-        "claim": { "text": "...", "quotes": ["..."] },
-        "reasoning": { "text": "...", "quotes": ["..."] }
+        "claim": [{ "text": "...", "quote": "..." }],
+        "reasoning": [
+          { "text": "...", "quote": "..." },
+          { "text": "...", "quote": "..." }
+        ]
       }
     }
   ]
@@ -87,6 +91,6 @@ visitor's question.
 ## Tests
 
 `test_cases.py` builds the fixture index and serves cards in each state through
-the route: current and judged with a flagged field, unjudged, written from an
-older body and written by an older prompt. It also checks the response below the
-threshold. No test sets an API key.
+the route: current and judged with flagged points, judged by an older judge,
+written from an older body and written by an older prompt. It also checks the
+response below the threshold. No test sets an API key.

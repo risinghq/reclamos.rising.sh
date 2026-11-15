@@ -9,7 +9,7 @@ call, so visitors never spend model credit. The code is in
 | File            | Owns                                                        |
 | --------------- | ----------------------------------------------------------- |
 | `card.py`       | The card prompt, its schema and the quote check of a reply  |
-| `judge.py`      | The judge that reads each checked field against its quotes  |
+| `judge.py`      | The judge that reads each checked point against its quote   |
 | `repository.py` | The `cards` table: stale cards, writes, verdicts and report |
 | `commands.py`   | `reclamos cards build`, `judge` and `report`                |
 
@@ -25,9 +25,15 @@ schema with these fields:
 | `reasoning`         | Why the tribunal decided as it did                           |
 | `evidence`          | The evidence that decided the case, or the evidence missing  |
 
-Each field has a text and up to three quotes copied from the body. The reply
-also holds three readings: `outcome`, `operator` and `resolved_on`, each with a
-quote. The number, operator and outcome a page shows come from
+Each field is a list of up to three points, most important first. A point is a
+quote copied from the body and one plain sentence that says only what that quote
+says. The schema puts the quote before the sentence, so the model copies the
+quote first and writes the sentence from it. Before this order, the model wrote
+sentences from the whole body and attached short quotes that backed only part of
+them. A visitor can check each sentence against its own quote.
+
+The reply also holds three readings: `outcome`, `operator` and `resolved_on`,
+each with a quote. The number, operator and outcome a page shows come from
 [parse](corpus.md), never from the model. The readings exist to audit parse.
 
 `check_card` keeps only what the body backs:
@@ -35,7 +41,9 @@ quote. The number, operator and outcome a page shows come from
 - A quote survives when it is in the body by the [quote rule](llm.md#quotes): at
   least 20 characters, comparing without case, accents, runs of whitespace or
   quote marks.
-- A field with no surviving quote, or with no text, is dropped.
+- A point survives when it has a sentence and its quote is in the body. The
+  first three surviving points of a field are kept. A field with no point left
+  is dropped.
 - A reading survives when its value is valid and its quote is in the body. An
   outcome must be one of the parse outcomes and a date must be a real date. A
   reading the model leaves empty has no quote, so it is dropped.
@@ -52,11 +60,21 @@ Writing a card again clears its verdict.
 
 ## Judge
 
-`reclamos cards judge` sends each unjudged card to the judge model. The judge
-reads the surviving fields and their quotes only, not the body. The quotes have
-already passed the check, so a field its quotes back is backed by the body. The
-judge lists each claim its quotes do not back, with its field. A card with an
-empty list is faithful.
+`reclamos cards judge` sends each current card without a current verdict to the
+judge model. The judge reads the numbered points and their quotes only, not the
+body. The quotes have already passed the check, so a point its quote backs is
+backed by the body. Another point's quote does not back it. The judge lists each
+point its quote does not back: its field, its number counted from 1 and the
+unbacked words of its sentence. A card with an empty list is faithful.
+[`POST /cases`](cases.md) serves only the points the judge did not list.
+
+A verdict is current while its `judge_version` matches `JUDGE_VERSION`, the hash
+of the judge prompt and schema. A judge change makes every verdict stale, and
+the next `judge` run judges the cards again.
+
+On a pilot of 10 cards (2026-11-15), 82% of points were served. Most of the
+judge's errors were strict: it flagged points that their quote backs. A strict
+error hides a good point and never serves a bad one.
 
 ## Commands
 
@@ -67,7 +85,10 @@ with purpose `card` or `judge`.
 `reclamos cards build --budget-usd N` writes a card for every resolution with a
 body and no current card, smallest id first. It stops before the call that could
 take the run past `N` and prints where it stopped. A call in flight counts at
-its worst case, so `--concurrency` cannot pass the budget.
+its worst case, so `--concurrency` cannot pass the budget. A call the API
+refuses, such as one past the Console's workspace usage limit, stops the run the
+same way, because every later call would be refused too. The next run writes
+only the cards still missing.
 
 | Flag              | Meaning                                   |
 | ----------------- | ----------------------------------------- |
@@ -80,10 +101,11 @@ its worst case, so `--concurrency` cannot pass the budget.
 `reclamos cards report` makes no call. It prints:
 
 - the cards, how many are current, and their cost;
-- how many cards kept each field;
-- the quotes, fields and readings the check dropped;
-- the share of judged cards the judge found faithful, and the unsupported claims
+- how many points each field kept, over the current cards;
+- the points and readings the check dropped;
+- the share of judged cards the judge found faithful, and the unsupported points
   by field;
+- the share of judged points that are served;
 - each reading that disagrees with parse, and each reading where parse has no
   value.
 
@@ -107,6 +129,6 @@ US$0.08 with Sonnet 5.5.
 ## Tests
 
 `test_cards.py` builds cards from the fixture resolutions with the fake model.
-It walks the flow: a run stopped by its budget, a second run that finishes, a
-third that writes nothing, the quote check, the judge and the report. No test
-calls the Anthropic API.
+It walks the flow: a run stopped by its budget, one stopped by the API's
+refusal, a run that finishes, a third that writes nothing, the quote check, the
+judge and the report. No test calls the Anthropic API.

@@ -1,5 +1,4 @@
 import json
-from typing import Any
 
 import pytest
 from fakeembed import HashingEmbedder
@@ -7,7 +6,7 @@ from fakemodel import FakeModel, as_rewritten
 from reclamos_api import cli
 from reclamos_api.cards import judge
 from reclamos_api.config import Settings
-from reclamos_api.llm.client import Prompt
+from reclamos_api.llm.client import NotBilled, Prompt
 from test_search import BILLING, CONTRACT, ENTEL, QUEJA, query
 
 INVENTED = "el tribunal ordenó devolver diez mil soles al usuario"
@@ -22,8 +21,8 @@ def body_of(prompt: Prompt) -> str:
     return prompt.text.split("Texto de la resolución:\n\n", 1)[1]
 
 
-def field(text: str, *quotes: str) -> dict[str, Any]:
-    return {"text": text, "quotes": list(quotes)}
+def point(text: str, quote: str) -> dict[str, str]:
+    return {"text": text, "quote": quote}
 
 
 def reading(value: str, quote: str) -> dict[str, str]:
@@ -31,20 +30,26 @@ def reading(value: str, quote: str) -> dict[str, str]:
 
 
 def card_or_verdict(prompt: Prompt) -> str:
-    """A card that quotes the body it was sent, with one invented quote, one
-    field backed only by that quote, and a misread outcome. A verdict that
-    finds one unsupported claim."""
+    """A card that quotes the body it was sent, with a point on an invented
+    quote, a field backed only by that quote, a point with no text, and a
+    misread outcome. A verdict that flags the first claim point."""
     if prompt.system == judge.SYSTEM:
-        return json.dumps({"unsupported": [{"field": "claim", "claim": "pidió"}]})
+        return json.dumps(
+            {"unsupported": [{"field": "claim", "point": 1, "claim": "reclamó"}]}
+        )
     body = body_of(prompt)
     return json.dumps(
         {
-            "claim": field(
-                "El usuario reclamó.", as_rewritten(body[400:520]), INVENTED
-            ),
-            "operator_position": field("La empresa devolvió todo.", INVENTED),
-            "reasoning": field("", ""),
-            "evidence": field("Faltó la prueba.", body[1000:1100]),
+            "claim": [
+                point("El usuario reclamó.", as_rewritten(body[400:520])),
+                point("Pidió diez mil soles.", INVENTED),
+            ],
+            "operator_position": [point("La empresa devolvió todo.", INVENTED)],
+            "reasoning": [],
+            "evidence": [
+                point("Faltó la prueba.", body[1000:1100]),
+                point("", body[1100:1200]),
+            ],
             "outcome": reading("fundado", OUTCOME_LINE),
             "operator": reading("América Móvil Perú S.A.C.", OPERATOR_LINE),
             "resolved_on": reading("2022-08-24", DATE_LINE),
@@ -79,13 +84,22 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
     assert "stopped: the run has spent" in out
     assert len(model.prompts) == 1
 
+    model.error = NotBilled("400: usage limit reached")
+    out = cards(
+        "build", "--budget-usd", "1", "--concurrency", "1", model=model, capsys=capsys
+    )
+    assert "cards written: 0 of 3" in out
+    assert "stopped: the provider refused: 400: usage limit reached" in out
+    assert len(model.prompts) == 2, "a provider refusal stops the run"
+
+    model.error = None
     model.output_tokens = 20
     out = cards("build", "--budget-usd", "1", model=model, capsys=capsys)
     assert "cards written: 3 of 3 without a current card" in out
     assert "stopped" not in out
     out = cards("build", "--budget-usd", "1", model=model, capsys=capsys)
     assert "cards written: 0 of 0" in out
-    assert len(model.prompts) == 4, "a current card is not written again"
+    assert len(model.prompts) == 5, "a current card is not written again"
     assert all(p.model == "claude-sonnet-5-5" for p in model.prompts)
 
     rows = query(indexed, "SELECT * FROM cards ORDER BY resolution_id")
@@ -93,15 +107,16 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
     billing = rows[0]
     fields = json.loads(billing["fields"])
     assert set(fields) == {"claim", "evidence"}, (
-        "a field with only invented quotes, or no text, is dropped"
+        "a field with only invented quotes, or with no point, is dropped"
     )
-    assert len(fields["claim"]["quotes"]) == 1
+    assert [p["text"] for p in fields["claim"]] == ["El usuario reclamó."]
+    assert len(fields["evidence"]) == 1, "a point with no text is dropped"
     rejected = json.loads(billing["rejected"])
-    assert {"field": "claim", "quote": INVENTED} in rejected
-    assert {
-        "field": "operator_position",
-        "text": "La empresa devolvió todo.",
-    } in rejected
+    for name, text in [
+        ("claim", "Pidió diez mil soles."),
+        ("operator_position", "La empresa devolvió todo."),
+    ]:
+        assert {"field": name, "text": text, "quote": INVENTED} in rejected
     assert set(json.loads(billing["readings"])) == {
         "outcome",
         "operator",
@@ -114,16 +129,19 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
 
     out = cards("judge", "--budget-usd", "1", model=model, capsys=capsys)
     assert "cards judged: 4 of 4 without a verdict" in out
-    judged = model.prompts[4]
+    judged = model.prompts[5]
     assert judged.system == judge.SYSTEM
-    assert fields["claim"]["quotes"][0] in judged.text
+    assert "claim 1: El usuario reclamó.\nCita: «" in judged.text
+    assert fields["claim"][0]["quote"] in judged.text
     assert INVENTED not in judged.text, "the judge reads only the checked card"
 
     out = cards("report", model=model, capsys=capsys)
     assert "cards: 4 (4 current)" in out
-    assert "fields: claim 4, operator_position 0, reasoning 0, evidence 4" in out
+    assert "points: claim 4, operator_position 0, reasoning 0, evidence 4" in out
+    assert "dropped: 12 points" in out
     assert "judged: 4, faithful 0 (0.0%)" in out
-    assert "unsupported by field: claim 4" in out
+    assert "unsupported points by field: claim 4" in out
+    assert "points served: 4 of 8 judged (50.0%)" in out
     assert "disagreements with parse: 2" in out
     for resolution in (BILLING, CONTRACT):
         assert f"{resolution} outcome: parse infundado, card fundado" in out, (
