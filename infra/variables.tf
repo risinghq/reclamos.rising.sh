@@ -32,6 +32,12 @@ variable "web_origins" {
   description = "Origins of the web app, such as https://reclamos.example, allowed to call the API from a browser."
 }
 
+variable "worker_count" {
+  type        = number
+  default     = 0
+  description = "Worker tasks to run. Set 1 while a crawl runs; the worker idles otherwise."
+}
+
 variable "route53_zone_name" {
   type        = string
   description = "Public Route53 hosted zone containing api_domain_name."

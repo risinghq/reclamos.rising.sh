@@ -119,6 +119,10 @@ The `s3` store uses the standard AWS credential chain. The worker started by
 continue a crawl that `reclamos corpus crawl` began. The one-request-per-second
 limit is per process: do not run both at once.
 
+The deployed worker runs no task by default, because the corpus changes only
+during a crawl. Apply Terraform with `-var worker_count=1` to run it, and with
+the default again when the queue is empty.
+
 ## OCR
 
 OCR needs `pdftoppm` from poppler-utils and `tesseract` with the Spanish
