@@ -1,16 +1,30 @@
+import type { BadgeVariant } from "@gitbutler/but-ui-react/Badge.tsx";
 import type { CardField } from "./api";
 
 // The claim types a visitor can pick. `procedural` is left out: it names
 // resolutions about the appeal itself, not a kind of problem.
-export const CLAIM_TYPES: [string, string][] = [
-  ["billing", "Cobros y recibos"],
-  ["service_cut", "Corte, baja o suspensión"],
-  ["service_quality", "Calidad, averías o instalación"],
-  ["unrequested_contract", "Servicio que no pedí"],
-  ["contract_terms", "Contrato, ofertas o promociones"],
-  ["equipment", "Equipos y garantía"],
-  ["porting", "Portabilidad"],
+export const CLAIM_TYPES = [
+  { value: "billing", label: "Cobros y recibos" },
+  { value: "service_cut", label: "Corte, baja o suspensión" },
+  { value: "service_quality", label: "Calidad, averías o instalación" },
+  { value: "unrequested_contract", label: "Servicio que no pedí" },
+  { value: "contract_terms", label: "Contrato, ofertas o promociones" },
+  { value: "equipment", label: "Equipos y garantía" },
+  { value: "porting", label: "Portabilidad" },
 ];
+
+// The colour says how the claim ended for the user: won, lost, or dismissed
+// before the tribunal looked at the merits.
+const OUTCOME_BADGES: Record<string, BadgeVariant> = {
+  fundado: "safe",
+  fundado_en_parte: "safe",
+  infundado: "danger",
+  improcedente: "warn",
+};
+
+export function outcomeBadge(outcome: string | null): BadgeVariant {
+  return (outcome && OUTCOME_BADGES[outcome]) || "lightGray";
+}
 
 const OUTCOMES: Record<string, string> = {
   fundado: "Fundado",

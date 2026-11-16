@@ -1,0 +1,38 @@
+.case > * {
+  padding: var(--but-padding-card);
+}
+
+.head {
+  display: grid;
+  justify-items: start;
+  gap: var(--but-space-lg);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--but-space-2xl);
+  row-gap: var(--but-space-sm);
+  color: var(--but-muted-foreground);
+}
+
+.body {
+  display: grid;
+  gap: var(--but-padding-card);
+}
+
+.points {
+  display: grid;
+  gap: var(--but-space-2xl);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quote {
+  margin: var(--but-space-md) 0 0;
+  padding-left: var(--but-space-xl);
+  border-left: 2px solid var(--but-border);
+  color: var(--but-muted-foreground);
+  line-height: var(--but-font-line-height-body);
+}

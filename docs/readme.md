@@ -13,7 +13,9 @@
    and their cards, and its similarity threshold.
 7. [Evaluation](evaluation.md) describes the judged questions, `reclamos eval`,
    the CI gate and the latest results.
-8. [Operations](operations.md) covers local services, checks, and deployment
+8. [Web](web.md) describes the search page and the vendored GitButler
+   components.
+9. [Operations](operations.md) covers local services, checks, and deployment
    verification.
 
 The root [README](../README.md) is the quick start for readers who want to run

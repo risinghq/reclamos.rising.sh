@@ -1,0 +1,16 @@
+{
+  "name": "@gitbutler/but-ui",
+  "description": "GitButler's design tokens, fonts and base styles, vendored",
+  "private": true,
+  "version": "11.3.0",
+  "type": "module",
+  "license": "FSL-1.1-MIT",
+  "exports": {
+    "./tokens": "./tokens/tokens.css",
+    "./fonts": "./fonts/fonts.css",
+    "./fonts/*": "./fonts/*",
+    "./core": "./core.css",
+    "./styles/reset": "./styles/reset.css",
+    "./styles/text": "./styles/text.css"
+  }
+}

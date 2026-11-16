@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CasesResponse, FoundCase } from "./api";
 import { App } from "./App";
@@ -39,17 +40,19 @@ function answer(status: number, body?: CasesResponse) {
   return () => JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
 }
 
-function searchFor(problem: string, claimType?: string) {
+async function searchFor(problem: string, claimType?: string) {
+  const user = userEvent.setup();
   render(<App />);
   fireEvent.change(screen.getByLabelText("Tu problema"), {
     target: { value: problem },
   });
   if (claimType) {
-    fireEvent.change(screen.getByLabelText("Tipo de problema"), {
-      target: { value: claimType },
-    });
+    await user.click(
+      screen.getByRole("combobox", { name: "Tipo de problema" }),
+    );
+    await user.click(await screen.findByRole("option", { name: claimType }));
   }
-  fireEvent.click(screen.getByRole("button", { name: "Buscar casos" }));
+  await user.click(screen.getByRole("button", { name: "Buscar casos" }));
 }
 
 afterEach(() => {
@@ -79,7 +82,7 @@ describe("search page", () => {
       ],
     });
 
-    searchFor("  me cobran un plan  ", "billing");
+    await searchFor("  me cobran un plan  ", "Cobros y recibos");
 
     expect(
       await screen.findByRole("heading", { name: "Casos parecidos" }),
@@ -121,7 +124,7 @@ describe("search page", () => {
   ])("explains %s without showing cases", async (_, respond, message) => {
     const sent = respond();
 
-    searchFor("me cortaron el internet");
+    await searchFor("me cortaron el internet");
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(sent()).toEqual({

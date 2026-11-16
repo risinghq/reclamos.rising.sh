@@ -2,7 +2,9 @@
   "name": "reclamos-workspace",
   "private": true,
   "workspaces": [
-    "apps/web"
+    "apps/web",
+    "packages/but-ui",
+    "packages/but-ui-react"
   ],
   "devDependencies": {
     "oxfmt": "^0.78.0",

@@ -1,0 +1,28 @@
+{
+  "name": "@gitbutler/but-ui-react",
+  "description": "GitButler's React components, vendored",
+  "private": true,
+  "version": "0.0.0-dev",
+  "type": "module",
+  "license": "FSL-1.1-MIT",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@tanstack/react-hotkeys": "^0.10.0",
+    "@tanstack/react-virtual": "^3.14.10",
+    "effect": "^3.20.0",
+    "markdown-to-jsx": "^7.7.17",
+    "react-resizable-panels": "^4.11.2"
+  },
+  "peerDependencies": {
+    "@gitbutler/but-ui": "workspace:*",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  }
+}
