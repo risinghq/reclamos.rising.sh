@@ -4,11 +4,25 @@ The offline [cards](cards.md) are the only code that calls a language model. No
 route calls one, so a visitor never spends model credit. The code is in
 `apps/api/src/reclamos_api/llm/`.
 
-| File        | Owns                                                                |
-| ----------- | ------------------------------------------------------------------- |
-| `client.py` | The `LanguageModel` protocol, the Anthropic client and model prices |
-| `spend.py`  | The cost log `llm_calls` and the limits checked before every call   |
-| `quotes.py` | The rule that a quote is in its text                                |
+| File        | Owns                                                                                |
+| ----------- | ----------------------------------------------------------------------------------- |
+| `client.py` | The `LanguageModel` protocol, the Anthropic and OpenRouter clients and model prices |
+| `spend.py`  | The cost log `llm_calls` and the limits checked before every call                   |
+| `quotes.py` | The rule that a quote is in its text                                                |
+
+## Providers
+
+Each model in `MODELS` names its provider. `model_for` builds the client of that
+provider, so `CARD_MODEL` and `JUDGE_MODEL` may use different ones. A command
+exits when the key of its model's provider is unset.
+
+- Anthropic serves the `claude-*` models through the Messages API.
+- OpenRouter serves the other models through its Chat Completions API. A request
+  sets `provider.max_price` to the price in `MODELS`, so no dearer endpoint
+  serves it and the worst case stays an upper bound. It sets
+  `provider.require_parameters`, so only an endpoint that honours the strict
+  JSON schema serves it. It turns reasoning off. The ledger records the
+  `usage.cost` that OpenRouter reports, which can be below the `MODELS` price.
 
 ## Quotes
 
@@ -40,10 +54,12 @@ The row is written before the call with `reserved_usd`, the worst case. A call
 in flight counts at that amount. When the call returns, the row gets the token
 counts and the billed `usd`. When it fails, it gets the error and a cost:
 
-- A `NotBilled` error counts 0. The Anthropic client raises it for an HTTP error
-  status, which the API does not bill.
+- A `NotBilled` error counts 0. Both clients raise it for an HTTP error status,
+  which neither provider bills.
 - Any other error, such as a timeout or a cancelled request, keeps the reserved
-  cost, because the API may have billed the call.
+  cost, because the provider may have billed the call. OpenRouter answers 200
+  with an `error` body when the model fails after it started, and the client
+  raises `ProviderFailed` for it.
 
 A process that dies during a call leaves its row with no `usd`, and the row
 counts at `reserved_usd` for the rest of the day.
@@ -65,19 +81,21 @@ WHERE started_at >= now() - interval '1 day'
 GROUP BY 1, 2;
 ```
 
-The Anthropic Console limits the workspace too. Those limits are the operator's
-and sit outside this code.
+The Anthropic Console limits the workspace and OpenRouter limits each key. Those
+limits are the operator's and sit outside this code.
 
 ## Settings
 
-| Variable            | Default | Meaning                                                   |
-| ------------------- | ------- | --------------------------------------------------------- |
-| `ANTHROPIC_API_KEY` | unset   | Without it the card commands exit                         |
-| `DAILY_USD_CAP`     | `2.0`   | US dollars all processes together may spend in a Lima day |
+| Variable             | Default | Meaning                                                   |
+| -------------------- | ------- | --------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`  | unset   | Needed to call a `claude-*` model                         |
+| `OPENROUTER_API_KEY` | unset   | Needed to call any other model in `MODELS`                |
+| `DAILY_USD_CAP`      | `2.0`   | US dollars all processes together may spend in a Lima day |
 
 ## Tests
 
 `apps/api/tests/fakemodel.py` stands in for the model. It records the prompts,
 bills fixed token counts, and replies with a function of the prompt.
 `test_llm.py` covers the quote rule, the client's request and errors, and the
-spend limits against PostgreSQL. No test calls the Anthropic API.
+spend limits against PostgreSQL. The OpenRouter tests answer through
+`httpx.MockTransport`. No test calls a provider.

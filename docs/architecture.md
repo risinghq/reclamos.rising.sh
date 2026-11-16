@@ -7,7 +7,7 @@ browser -> apps/web -> apps/api -> PostgreSQL (pgvector)
                               \-> rqueue jobs -> apps/api worker -> gob.pe
                                                       \-> PDF store (disk or S3)
                                                       \-> embedding model (local)
-                              \-> Anthropic API (answers)
+apps/api reclamos cards (offline) -> Anthropic or OpenRouter
 packages/eval -> retrieval metrics and the judged questions
 infra -> AWS ECS, RDS, S3, ECR, IAM
 ```
@@ -37,9 +37,9 @@ the embedding model, `search.py` ranks and fuses, and `api.py` is the
 indexes and fusion.
 
 `apps/api/src/reclamos_api/llm/` calls the hosted language model offline:
-`client.py` holds the `LanguageModel` protocol and the Anthropic client,
-`spend.py` logs each call to `llm_calls` and refuses calls that could pass a
-spend limit, and `quotes.py` checks that a quote is in its text.
+`client.py` holds the `LanguageModel` protocol and the Anthropic and OpenRouter
+clients, `spend.py` logs each call to `llm_calls` and refuses calls that could
+pass a spend limit, and `quotes.py` checks that a quote is in its text.
 [Model calls](llm.md) describes the limits.
 
 `apps/api/src/reclamos_api/cards/` writes one case card per resolution offline,

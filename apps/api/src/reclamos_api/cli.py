@@ -19,7 +19,12 @@ from reclamos_api.corpus.store import store_from_settings
 from reclamos_api.db import database_pool
 from reclamos_api.evaluation import commands as evaluation
 from reclamos_api.evaluation.run import DatasetError
-from reclamos_api.llm.client import LanguageModel, model_from_settings
+from reclamos_api.llm.client import (
+    LanguageModel,
+    MissingKey,
+    UnpricedModel,
+    model_for,
+)
 from reclamos_api.retrieval.embedder import Embedder, embedder_from_settings
 
 FIRST_PUBLISHED = date(2003, 1, 1)
@@ -221,10 +226,15 @@ async def run_cards(
 ) -> str:
     if arguments.action == "report":
         return await card_commands.report(settings)
-    model = model or model_from_settings(settings)
+    building = arguments.action == "build"
     if model is None:
-        raise SystemExit("set ANTHROPIC_API_KEY to call the card model")
-    if arguments.action == "build":
+        try:
+            model = model_for(
+                settings, settings.card_model if building else settings.judge_model
+            )
+        except (MissingKey, UnpricedModel) as error:
+            raise SystemExit(str(error)) from None
+    if building:
         return await card_commands.build(
             settings,
             model,

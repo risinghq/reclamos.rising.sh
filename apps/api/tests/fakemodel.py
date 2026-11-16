@@ -17,6 +17,7 @@ class FakeModel:
     input_tokens: int = 10
     output_tokens: int = 20
     stop_reason: str = "end_turn"
+    usd: float | None = None
     error: BaseException | None = None
     # Set to hold every call until it is set.
     gate: asyncio.Event | None = None
@@ -35,6 +36,7 @@ class FakeModel:
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
             stop_reason=self.stop_reason,
+            usd=self.usd,
         )
 
 

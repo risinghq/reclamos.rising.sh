@@ -1,21 +1,30 @@
 import asyncio
 import dataclasses
+import json
 from collections.abc import Callable
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
 import anthropic
+import httpx
 import httpx2
 import pytest
 from fakemodel import FakeModel
+from reclamos_api.config import Settings
 from reclamos_api.db import database_pool
 from reclamos_api.llm.client import (
     MAX_PROMPT_CHARS,
+    MODELS,
     AnthropicModel,
+    Completion,
+    MissingKey,
     NotBilled,
+    OpenRouterModel,
     Prompt,
+    ProviderFailed,
     UnpricedModel,
+    model_for,
     worst_case_usd,
 )
 from reclamos_api.llm.quotes import is_quoted
@@ -125,6 +134,112 @@ def test_only_an_error_status_from_the_api_counts_as_not_billed() -> None:
         )
 
 
+FLASH = "deepseek/deepseek-v4-flash"
+
+
+def openrouter(
+    reply: httpx.Response, requests: list[httpx.Request] | None = None
+) -> OpenRouterModel:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if requests is not None:
+            requests.append(request)
+        return reply
+
+    return OpenRouterModel("key", transport=httpx.MockTransport(handle))
+
+
+def choice(finish_reason: str) -> dict[str, Any]:
+    return {
+        "choices": [
+            {"message": {"content": '{"a": 1}'}, "finish_reason": finish_reason}
+        ],
+        "usage": {"prompt_tokens": 12, "completion_tokens": 7, "cost": 0.0004},
+    }
+
+
+def test_an_openrouter_request_caps_the_price_and_requires_the_schema() -> None:
+    """`max_price` keeps a dearer endpoint from serving, so the worst case
+    priced from MODELS holds. Without `require_parameters` an endpoint that
+    ignores `response_format` may serve."""
+    requests: list[httpx.Request] = []
+    prompt = dataclasses.replace(PROMPT, model=FLASH, schema={"type": "object"})
+
+    completion = asyncio.run(
+        openrouter(httpx.Response(200, json=choice("stop")), requests).complete(prompt)
+    )
+
+    sent = json.loads(requests[0].content)
+    assert requests[0].headers["authorization"] == "Bearer key"
+    assert sent["max_tokens"] == prompt.max_tokens
+    assert sent["reasoning"] == {"enabled": False}
+    assert sent["response_format"]["json_schema"]["strict"] is True
+    assert sent["response_format"]["json_schema"]["schema"] == {"type": "object"}
+    assert sent["provider"]["require_parameters"] is True
+    price = MODELS[FLASH].price
+    assert sent["provider"]["max_price"] == {
+        "prompt": price.input,
+        "completion": price.output,
+    }
+    assert completion == Completion('{"a": 1}', 12, 7, "stop", usd=0.0004)
+
+
+@pytest.mark.parametrize(
+    ("reply", "outcome"),
+    [
+        pytest.param(
+            httpx.Response(200, json=choice("length")), "max_tokens", id="cut-reply"
+        ),
+        pytest.param(
+            httpx.Response(200, json=choice("content_filter")),
+            "refusal",
+            id="filtered-reply",
+        ),
+        pytest.param(
+            httpx.Response(402, json={"error": {"message": "no credits"}}),
+            NotBilled,
+            id="error-status",
+        ),
+        pytest.param(
+            httpx.Response(200, json={"error": {"code": 502, "message": "down"}}),
+            ProviderFailed,
+            id="failed-mid-generation",
+        ),
+        pytest.param(
+            httpx.Response(200, json={"choices": []}), ProviderFailed, id="no-choices"
+        ),
+    ],
+)
+def test_openrouter_replies_map_to_the_names_the_callers_check(
+    reply: httpx.Response, outcome: str | type[Exception]
+) -> None:
+    """Only an error status is refused before the model ran. A 200 carrying an
+    error may be billed, so it must not raise NotBilled."""
+    prompt = dataclasses.replace(PROMPT, model=FLASH)
+    if isinstance(outcome, str):
+        completion = asyncio.run(openrouter(reply).complete(prompt))
+        assert completion.stop_reason == outcome
+    else:
+        with pytest.raises(outcome):
+            asyncio.run(openrouter(reply).complete(prompt))
+
+
+@pytest.mark.parametrize(
+    ("model", "key"),
+    [
+        pytest.param(SONNET, "ANTHROPIC_API_KEY", id="anthropic"),
+        pytest.param(FLASH, "OPENROUTER_API_KEY", id="openrouter"),
+    ],
+)
+def test_a_model_needs_its_own_provider_key(model: str, key: str) -> None:
+    settings = Settings(
+        database_url="postgresql://unused",
+        anthropic_api_key="a" if key != "ANTHROPIC_API_KEY" else None,
+        openrouter_api_key="o" if key != "OPENROUTER_API_KEY" else None,
+    )
+    with pytest.raises(MissingKey, match=key):
+        model_for(settings, model)
+
+
 def run_with_pool(url: str, work: Callable[[Any], Any]) -> Any:
     async def run() -> Any:
         async with database_pool(url, queue_schema="task_queue") as pool:
@@ -196,6 +311,24 @@ def test_the_daily_cap_counts_billed_failed_and_unbilled_calls_of_the_lima_day(
         assert rows[0]["reserved_usd"] == Decimal(repr(worst))
         assert rows[0]["error"] is None
         assert "overloaded" in rows[1]["error"]
+
+    run_with_pool(database_url, work)
+
+
+@pytest.mark.integration
+def test_the_ledger_records_the_charge_a_provider_reports(database_url: str) -> None:
+    """OpenRouter reports what the serving endpoint charged, which can be below
+    the price in MODELS."""
+    reported = HAIKU_CALL_USD / 4
+
+    async def work(pool: Any) -> None:
+        ledger = Ledger(pool, daily_cap_usd=1.0)
+        budget = Budget(limit_usd=1.0)
+        model = FakeModel(lambda _: "{}", usd=reported)
+        metered = await ledger.complete(model, PROMPT, purpose="card", budget=budget)
+        assert metered.usd == pytest.approx(reported)
+        assert budget.spent_usd == pytest.approx(reported)
+        assert await ledger.spent_today() == pytest.approx(reported)
 
     run_with_pool(database_url, work)
 

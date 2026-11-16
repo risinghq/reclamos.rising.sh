@@ -28,11 +28,11 @@ The API listens on port 8000 and the web app runs separately with
 [`.env.example`](../.env.example) lists every environment variable the API, the
 worker and the tests read.
 
-Only `reclamos cards` needs `ANTHROPIC_API_KEY`, and only on the host that
-builds the cards. The deployed API needs no key. Keep the key in a gitignored
-`.env` with mode 600. `DAILY_USD_CAP` bounds what every process sharing the
-database spends in a Lima day, and `llm_calls` records each call
-([model calls](llm.md#spend-limits)).
+Only `reclamos cards` needs a model key (`ANTHROPIC_API_KEY` or
+`OPENROUTER_API_KEY`), and only on the host that builds the cards. The deployed
+API needs no key. Keep the keys in a gitignored `.env` with mode 600.
+`DAILY_USD_CAP` bounds what every process sharing the database spends in a Lima
+day, and `llm_calls` records each call ([model calls](llm.md#spend-limits)).
 
 The database is disposable. The API applies its one application schema file on
 startup and owns rqueue schema setup. There are no project migrations: when
