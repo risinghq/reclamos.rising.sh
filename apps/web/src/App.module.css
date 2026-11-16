@@ -11,23 +11,9 @@
   gap: var(--but-space-xl);
 }
 
-.eyebrow {
-  color: var(--but-subtle-foreground);
-  letter-spacing: 0.08em;
-}
-
-/* A consumer landing needs a larger head than the app's text-h1. */
-.title {
-  font-weight: var(--but-font-weight-semibold);
-  font-size: clamp(1.75rem, 6vw, 2.5rem);
-  line-height: var(--but-font-line-height-heading);
-  text-wrap: balance;
-}
-
 .lead {
-  max-width: 52ch;
+  max-width: 60ch;
   color: var(--but-muted-foreground);
-  font-size: 1rem;
 }
 
 .search {
