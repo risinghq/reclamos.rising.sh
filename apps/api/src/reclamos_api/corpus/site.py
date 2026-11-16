@@ -207,6 +207,16 @@ class Fetcher:
         return response
 
 
+# A listing title is "Expediente N.° " before the expediente number, and older
+# titles repeat the word: "Expediente N.° Expediente 03779-2006/TRASU/GUS-RA".
+# schema.sql strips rows stored before with the same pattern.
+EXPEDIENTE_LABEL = re.compile(r"^(?:expediente\s*(?:n\.?\s*[°º]\s*)?)+", re.I)
+
+
+def bare_expediente(title: str) -> str:
+    return EXPEDIENTE_LABEL.sub("", title).strip()
+
+
 @dataclass(frozen=True, slots=True)
 class ListedResolution:
     id: int
@@ -283,7 +293,7 @@ def parse_listing(javascript: str) -> Listing:
                 ListedResolution(
                     id=int(id_match.group(1)),
                     page_url=urljoin(SITE, href),
-                    expediente=link.text(strip=True),
+                    expediente=bare_expediente(link.text(strip=True)),
                     published_on=parse_spanish_date(heading.text(strip=True)),
                 )
             )

@@ -10,7 +10,9 @@ OSIPTEL publishes the resolutions in the "Jurisprudencia" collection on gob.pe:
 <https://www.gob.pe/institucion/osiptel/colecciones/52616-jurisprudencia>. Each
 entry is titled `Expediente N.° NNNNNNN-YYYY/TRASU/ST-RA` (an appeal) or
 `ST-RQJ` (a complaint about the procedure), and links to a page that links the
-PDF on `cdn.www.gob.pe`.
+PDF on `cdn.www.gob.pe`. Some older titles repeat the label, as in
+`Expediente N.° Expediente 005687-2009/...`. The crawler stores the bare number,
+`NNNNNNN-YYYY/TRASU/ST-RA`, in `resolutions.expediente`.
 
 The crawler follows the robots rules of each host. gob.pe disallows `?sheet=`
 pagination, so the crawler never pages. It asks the collection for one

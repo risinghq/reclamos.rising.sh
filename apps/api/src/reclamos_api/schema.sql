@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS resolutions (
     CHECK ((failure_stage IS NULL) = (failure_reason IS NULL))
 );
 
+-- `expediente` is the bare number. Rows listed before site.py stripped the
+-- "Expediente N.°" label of the gob.pe title keep it until this runs.
+UPDATE resolutions
+SET expediente = regexp_replace(
+    expediente, '^(expediente\s*(n\.?\s*[°º]\s*)?)+', '', 'i'
+)
+WHERE expediente ~* '^expediente';
+
 -- A listing window that discovery cannot read in full: one day with more
 -- entries than a page shows. A later complete listing of the window deletes it.
 CREATE TABLE IF NOT EXISTS listing_failures (
