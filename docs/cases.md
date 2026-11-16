@@ -5,10 +5,11 @@ resolutions most like it, each with its [card](cards.md) when one is served. It
 makes no model call: the cards were written and judged offline. The code is in
 `apps/api/src/reclamos_api/cases/`.
 
-| File      | Owns                                                   |
-| --------- | ------------------------------------------------------ |
-| `find.py` | The search, the grouping by resolution and the cut-off |
-| `api.py`  | The `POST /cases` route                                |
+| File        | Owns                                                   |
+| ----------- | ------------------------------------------------------ |
+| `find.py`   | The search, the grouping by resolution and the cut-off |
+| `brands.py` | The brands visitors name and their legal names         |
+| `api.py`    | The `POST /cases` route                                |
 
 ## Finding cases
 
@@ -20,7 +21,18 @@ makes no model call: the cards were written and judged offline. The code is in
    chunk. A resolution's similarity is the best cosine similarity of its chunks.
 3. Drop every resolution below `REFUSAL_MIN_SIMILARITY` and keep the first
    `limit`.
-4. Attach each kept resolution's served card fields.
+4. When the description names a brand, run steps 1 to 3 again for that brand's
+   legal names only. Up to `NAMED_BRAND_CASES` (2) of those cases go first, and
+   the cases of step 3 follow without repeats, still up to `limit`.
+5. Attach each kept resolution's served card fields.
+
+A resolution names the company by its legal name at the time, so `brands.py`
+maps each legal name to the brand a visitor knows: TIM and Telmex are Claro,
+Nextel is Entel, Telefónica and Integratel are Movistar, Viettel is Bitel. A
+brand word matches without case or accents. The cap is 2 because a brand with
+few resolutions clears the threshold with cases about other problems. Without a
+cap, a Bitel billing question filled all 5 slots with Bitel cases, 4 of them
+procedural.
 
 A card is served while it and its verdict are current: its `prompt_version`
 matches the code, its `body_sha256` matches the body, and its `judge_version`
@@ -38,6 +50,7 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
 {
   "query": "Me cobran un servicio que no contraté",
   "outcome": "found",
+  "brands": ["Movistar"],
   "outcomes": { "fundado": 3, "infundado": 2 },
   "cases": [
     {
@@ -45,10 +58,12 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
       "expediente": "...",
       "number": "...",
       "date": "2024-03-18",
-      "operator": "...",
+      "operator": "TELEFONICA DEL PERU S.A.A.",
+      "brand": "Movistar",
       "claim_type": "unrequested_contract",
       "outcome": "fundado",
       "url": "https://www.gob.pe/...",
+      "pdf_url": "https://cdn.www.gob.pe/...pdf",
       "similarity": 0.8731,
       "passage": {
         "ordinal": 7,
@@ -68,6 +83,10 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
   ]
 }
 ```
+
+`brands` lists the brands the query names. `brand` is null for a legal name
+`brands.py` does not map. `url` is the resolution's gob.pe page and `pdf_url`
+the PDF it links to.
 
 `outcomes` counts the returned cases by outcome, most common first. A case whose
 outcome parse could not read counts under `unknown`. When no resolution reaches
@@ -93,4 +112,6 @@ visitor's question.
 `test_cases.py` builds the fixture index and serves cards in each state through
 the route: current and judged with flagged points, judged by an older judge,
 written from an older body and written by an older prompt. It also checks the
-response below the threshold. No test sets an API key.
+response below the threshold and that a named brand's case moves first while the
+rest keep their order. `test_brands.py` checks the brand words and the
+legal-name map. No test sets an API key.

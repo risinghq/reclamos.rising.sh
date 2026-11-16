@@ -5,6 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from reclamos_api.cases.brands import brand_of, brands_named
 from reclamos_api.cases.find import (
     DEFAULT_CASES,
     MAX_CASES,
@@ -39,9 +40,11 @@ class FoundCase(BaseModel):
     number: str | None
     date: date | None
     operator: str | None
+    brand: str | None
     claim_type: str | None
     outcome: str | None
     url: str
+    pdf_url: str | None
     similarity: float
     passage: Passage
     # Absent until the resolution has a judged card. Each point is one the
@@ -52,6 +55,8 @@ class FoundCase(BaseModel):
 class CasesResponse(BaseModel):
     query: str
     outcome: Literal["found", "no_similar_case"]
+    # The brands the query names, whose cases come first.
+    brands: list[str]
     outcomes: dict[str, int]
     cases: list[FoundCase]
 
@@ -76,6 +81,7 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
     return CasesResponse(
         query=body.query,
         outcome="found" if found else "no_similar_case",
+        brands=brands_named(body.query),
         outcomes=outcome_counts(found),
         cases=[_found_case(case) for case in found],
     )
@@ -89,9 +95,11 @@ def _found_case(case: Case) -> FoundCase:
         number=fields["number"],
         date=fields["resolved_on"],
         operator=fields["operator"],
+        brand=brand_of(fields["operator"]),
         claim_type=fields["claim_type"],
         outcome=fields["outcome"],
         url=fields["page_url"],
+        pdf_url=fields["pdf_url"],
         similarity=round(case.similarity, 4),
         passage=Passage(
             ordinal=case.passage.ordinal,

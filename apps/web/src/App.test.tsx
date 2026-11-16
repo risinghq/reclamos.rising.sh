@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CasesResponse, FoundCase } from "./api";
@@ -11,9 +17,11 @@ const CASE: FoundCase = {
   number: "00321-2024-TRASU/OSIPTEL",
   date: "2024-03-18",
   operator: "AMERICA MOVIL PERU S.A.C.",
+  brand: "Claro",
   claim_type: "unrequested_contract",
   outcome: "fundado",
   url: "https://www.gob.pe/institucion/osiptel/normas-legales/1",
+  pdf_url: "https://cdn.www.gob.pe/uploads/document/file/1/res.pdf",
   similarity: 0.87,
   passage: {
     ordinal: 3,
@@ -29,6 +37,11 @@ const CASE: FoundCase = {
         quote: "no contrató el plan",
       },
     ],
+    reasoning: [
+      { text: "La empresa no probó la contratación.", quote: "no acreditó" },
+      { text: "No hay grabación de la venta.", quote: "sin grabación" },
+    ],
+    evidence: [{ text: "El recibo de marzo.", quote: "recibo" }],
   },
 };
 
@@ -71,10 +84,11 @@ describe("search page", () => {
     expect(screen.getByText(/no es asesoría legal/i)).toBeInTheDocument();
   });
 
-  it("shows each similar case with its points, their quotes and the source", async () => {
+  it("shows each case closed to its claim and one reason, and opens the rest", async () => {
     const sent = answer(200, {
       query: "me cobran un plan",
       outcome: "found",
+      brands: ["Claro"],
       outcomes: { fundado: 1 },
       cases: [
         CASE,
@@ -91,21 +105,42 @@ describe("search page", () => {
       query: "me cobran un plan",
       claim_type: "billing",
     });
+    expect(screen.getByText("Primero, casos con Claro.")).toBeInTheDocument();
     const [carded, bare] = screen.getAllByRole("article");
-    expect(carded).toHaveTextContent("Resolución 00321-2024-TRASU/OSIPTEL");
-    expect(carded).toHaveTextContent("Fundado");
-    expect(carded).toHaveTextContent("18 de marzo de 2024");
-    expect(carded).toHaveTextContent(
+    const inCard = within(carded);
+    expect(inCard.getByRole("heading", { level: 3 })).toHaveTextContent(
       "El usuario niega haber contratado el plan.",
     );
-    expect(carded).toHaveTextContent("«no contrató el plan»");
-    expect(screen.getAllByRole("link", { name: /gob\.pe/ })[0]).toHaveAttribute(
+    expect(carded).toHaveTextContent("Fundado");
+    expect(carded).toHaveTextContent("Claro (America Movil Peru S.A.C.)");
+    expect(carded).toHaveTextContent("18 de marzo de 2024");
+    expect(carded).toHaveTextContent("Resolución 00321-2024-TRASU/OSIPTEL");
+    expect(carded).toHaveTextContent("La empresa no probó la contratación.");
+    expect(carded).not.toHaveTextContent("No hay grabación de la venta.");
+    expect(carded).not.toHaveTextContent("El recibo de marzo.");
+    expect(inCard.getByText("«no acreditó»")).not.toBeVisible();
+    expect(
+      inCard.getByRole("link", { name: "Abrir la resolución (PDF)" }),
+    ).toHaveAttribute("href", CASE.pdf_url);
+    expect(inCard.getByRole("link", { name: "Ver en gob.pe" })).toHaveAttribute(
       "href",
       CASE.url,
     );
+
+    const user = userEvent.setup();
+    await user.click(
+      inCard.getByRole("button", { name: "Ver el caso completo" }),
+    );
+    expect(carded).toHaveTextContent("No hay grabación de la venta.");
+    expect(carded).toHaveTextContent("Pruebas");
+    expect(carded).toHaveTextContent("El recibo de marzo.");
+    await user.click(inCard.getAllByText("Ver cita")[0]!);
+    expect(inCard.getByText("«no contrató el plan»")).toBeVisible();
+
     expect(bare).toHaveTextContent("Expediente 1234-2024/TRASU");
     expect(bare).toHaveTextContent("Resultado sin leer");
     expect(bare).toHaveTextContent("El pasaje.");
+    expect(within(bare).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -115,6 +150,7 @@ describe("search page", () => {
         answer(200, {
           query: "x",
           outcome: "no_similar_case",
+          brands: [],
           outcomes: {},
           cases: [],
         }),

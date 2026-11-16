@@ -14,9 +14,11 @@ export type FoundCase = {
   number: string | null;
   date: string | null;
   operator: string | null;
+  brand: string | null;
   claim_type: string | null;
   outcome: string | null;
   url: string;
+  pdf_url: string | null;
   similarity: number;
   passage: {
     ordinal: number;
@@ -31,6 +33,7 @@ export type FoundCase = {
 export type CasesResponse = {
   query: string;
   outcome: "found" | "no_similar_case";
+  brands: string[];
   outcomes: Record<string, number>;
   cases: FoundCase[];
 };
