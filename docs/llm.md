@@ -64,8 +64,9 @@ counts and the billed `usd`. When it fails, it gets the error and a cost:
   which neither provider bills.
 - Any other error, such as a timeout or a cancelled request, keeps the reserved
   cost, because the provider may have billed the call. OpenRouter answers 200
-  with an `error` body when the model fails after it started, and the client
-  raises `ProviderFailed` for it.
+  with an `error` body when the model fails after it started. Both clients raise
+  `ProviderFailed` for that body, a timeout or a lost connection, so a batch
+  command can skip the one item and go on.
 
 A process that dies during a call leaves its row with no `usd`, and the row
 counts at `reserved_usd` for the rest of the day.

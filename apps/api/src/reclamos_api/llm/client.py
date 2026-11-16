@@ -48,8 +48,8 @@ class NotBilled(Exception):
 
 
 class ProviderFailed(Exception):
-    """The provider accepted the request and failed while the model ran, so
-    the call may be billed."""
+    """The provider accepted the request and failed while the model ran, or
+    the reply never arrived, so the call may be billed."""
 
 
 class LanguageModel(Protocol):
@@ -197,7 +197,7 @@ class AnthropicModel:
         self._client = client
 
     async def complete(self, prompt: Prompt) -> Completion:
-        from anthropic import APIStatusError
+        from anthropic import APIConnectionError, APIStatusError
 
         try:
             message = await self._client.messages.create(
@@ -213,6 +213,9 @@ class AnthropicModel:
             )
         except APIStatusError as error:
             raise NotBilled(f"{error.status_code}: {error.message}") from error
+        except APIConnectionError as error:
+            # APITimeoutError is a subclass.
+            raise ProviderFailed(repr(error)) from error
         text = "".join(block.text for block in message.content if block.type == "text")
         return Completion(
             text=text,
@@ -270,12 +273,15 @@ class OpenRouterModel:
             },
         }
         async with httpx.AsyncClient(transport=self._transport) as client:
-            response = await client.post(
-                OPENROUTER_URL,
-                json=request,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                timeout=prompt.timeout_s,
-            )
+            try:
+                response = await client.post(
+                    OPENROUTER_URL,
+                    json=request,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    timeout=prompt.timeout_s,
+                )
+            except httpx.TransportError as error:
+                raise ProviderFailed(repr(error)) from error
         if response.status_code >= 400:
             raise NotBilled(f"{response.status_code}: {response.text[:300]}")
         body: dict[str, Any] = response.json()

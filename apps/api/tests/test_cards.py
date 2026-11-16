@@ -6,7 +6,7 @@ from fakemodel import FakeModel, as_rewritten
 from reclamos_api import cli
 from reclamos_api.cards import judge
 from reclamos_api.config import Settings
-from reclamos_api.llm.client import NotBilled, Prompt
+from reclamos_api.llm.client import NotBilled, Prompt, ProviderFailed
 from test_search import BILLING, CONTRACT, ENTEL, QUEJA, query
 
 INVENTED = "el tribunal ordenó devolver diez mil soles al usuario"
@@ -95,6 +95,15 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
     assert "stopped: the provider refused: 400: usage limit reached" in out
     assert len(model.prompts) == 2, "a provider refusal stops the run"
 
+    model.error = ProviderFailed("APITimeoutError()")
+    out = cards(
+        "build", "--budget-usd", "1", "--concurrency", "1", model=model, capsys=capsys
+    )
+    assert "cards written: 0 of 3" in out
+    assert f"unreadable {CONTRACT}: the provider failed: APITimeoutError()" in out
+    assert "stopped" not in out
+    assert len(model.prompts) == 5, "a provider failure skips only its own card"
+
     model.error = None
     model.output_tokens = 20
     out = cards("build", "--budget-usd", "1", model=model, capsys=capsys)
@@ -102,7 +111,7 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
     assert "stopped" not in out
     out = cards("build", "--budget-usd", "1", model=model, capsys=capsys)
     assert "cards written: 0 of 0" in out
-    assert len(model.prompts) == 5, "a current card is not written again"
+    assert len(model.prompts) == 8, "a current card is not written again"
     assert all(p.model == "claude-sonnet-5-5" for p in model.prompts)
 
     rows = query(indexed, "SELECT * FROM cards ORDER BY resolution_id")
@@ -132,7 +141,7 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
 
     out = cards("judge", "--budget-usd", "1", model=model, capsys=capsys)
     assert "cards judged: 4 of 4 without a verdict" in out
-    judged = model.prompts[5]
+    judged = model.prompts[8]
     assert judged.system == judge.SYSTEM
     assert "claim 1: El usuario reclamó.\nCita: «" in judged.text
     assert fields["claim"][0]["quote"] in judged.text

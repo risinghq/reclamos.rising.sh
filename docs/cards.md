@@ -56,7 +56,8 @@ each with a quote. The number, operator and outcome a page shows come from
   it.
 
 A reply cut at the token cap, or one that is not JSON, writes no card. The run
-prints its resolution id as unreadable.
+prints its resolution id as unreadable. A call that times out or loses its
+connection skips only its own card the same way, and the next run writes it.
 
 A card is current while its `prompt_version` and `body_sha256` match the code
 and the body. `PROMPT_VERSION` hashes the system prompt and the schema, so a
