@@ -14,7 +14,7 @@ from reclamos_api.cards.card import FIELDS, PROMPT_VERSION, Unreadable, write_ca
 from reclamos_api.cards.judge import JUDGE_VERSION, judge_card
 from reclamos_api.config import Settings
 from reclamos_api.db import database_pool
-from reclamos_api.llm.client import LanguageModel, NotBilled
+from reclamos_api.llm.client import LanguageModel, NotBilled, ProviderFailed
 from reclamos_api.llm.quotes import normalize
 from reclamos_api.llm.spend import Budget, Ledger, SpendRefused
 
@@ -49,6 +49,9 @@ async def build(
                 )
             except Unreadable as error:
                 failed.append(f"{source.resolution_id}: {error}")
+                return
+            except ProviderFailed as error:
+                failed.append(f"{source.resolution_id}: the provider failed: {error}")
                 return
             async with pool.acquire() as connection:
                 await repository.save_card(
@@ -86,9 +89,13 @@ async def judge(
         async def one(card: tuple[int, Any]) -> None:
             nonlocal judged
             resolution_id, fields = card
-            verdict = await judge_card(
-                ledger, model, settings.judge_model, fields, budget=budget
-            )
+            try:
+                verdict = await judge_card(
+                    ledger, model, settings.judge_model, fields, budget=budget
+                )
+            except ProviderFailed:
+                unread.append(resolution_id)
+                return
             if verdict.unsupported is None:
                 unread.append(resolution_id)
                 return

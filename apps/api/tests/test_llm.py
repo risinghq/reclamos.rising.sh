@@ -120,13 +120,13 @@ def test_every_request_turns_thinking_off_and_the_reply_is_its_text(
 
 def test_only_an_error_status_from_the_api_counts_as_not_billed() -> None:
     """A status error is a refused request. A timeout may come after the model
-    ran, so it must reach the ledger as it is and keep the reserved cost."""
+    ran, so it is a provider failure that keeps the reserved cost."""
     overloaded = anthropic.APIStatusError(
         "overloaded", response=httpx2.Response(529, request=REQUEST), body=None
     )
     with pytest.raises(NotBilled):
         asyncio.run(AnthropicModel(client=FailingClient(overloaded)).complete(PROMPT))
-    with pytest.raises(anthropic.APITimeoutError):
+    with pytest.raises(ProviderFailed):
         asyncio.run(
             AnthropicModel(
                 client=FailingClient(anthropic.APITimeoutError(REQUEST))
@@ -146,6 +146,15 @@ def openrouter(
         return reply
 
     return OpenRouterModel("key", transport=httpx.MockTransport(handle))
+
+
+def test_an_openrouter_timeout_is_a_provider_failure() -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    model = OpenRouterModel("key", transport=httpx.MockTransport(handle))
+    with pytest.raises(ProviderFailed):
+        asyncio.run(model.complete(dataclasses.replace(PROMPT, model=FLASH)))
 
 
 def choice(finish_reason: str) -> dict[str, Any]:
