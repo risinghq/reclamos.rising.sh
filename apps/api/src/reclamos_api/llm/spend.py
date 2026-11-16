@@ -92,8 +92,12 @@ class Ledger:
                 billed = 0.0 if isinstance(error, NotBilled) else reserved
                 await asyncio.shield(self._fail(call_id, billed, repr(error)))
                 raise
-            billed = price_of(prompt.model).usd(
-                completion.input_tokens, completion.output_tokens
+            billed = (
+                completion.usd
+                if completion.usd is not None
+                else price_of(prompt.model).usd(
+                    completion.input_tokens, completion.output_tokens
+                )
             )
             await asyncio.shield(self._settle(call_id, completion, billed))
             return Metered(completion, billed)

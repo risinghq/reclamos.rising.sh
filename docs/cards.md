@@ -83,9 +83,10 @@ faithful cards matters less than the share of served points.
 
 ## Commands
 
-The commands run on a host with `ANTHROPIC_API_KEY` set. Each model call goes
-through the [spend limits](llm.md#spend-limits) and logs its row in `llm_calls`,
-with purpose `card` or `judge`.
+The commands run on a host with the key of their model's provider set
+([providers](llm.md#providers)). Each model call goes through the
+[spend limits](llm.md#spend-limits) and logs its row in `llm_calls`, with
+purpose `card` or `judge`.
 
 `reclamos cards build --budget-usd N` writes a card for every resolution with a
 body and no current card, smallest id first. It stops before the call that could
@@ -131,9 +132,11 @@ US$0.08 with Sonnet 5.5.
 | `CARD_MODEL`  | `claude-sonnet-5-5` | Writes the cards |
 | `JUDGE_MODEL` | `claude-sonnet-5-5` | Judges the cards |
 
+Either may name any model in `MODELS` in `llm/client.py`.
+
 ## Tests
 
 `test_cards.py` builds cards from the fixture resolutions with the fake model.
 It walks the flow: a run stopped by its budget, one stopped by the API's
 refusal, a run that finishes, a third that writes nothing, the quote check, the
-judge and the report. No test calls the Anthropic API.
+judge and the report. No test calls a provider.
