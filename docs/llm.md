@@ -23,6 +23,12 @@ exits when the key of its model's provider is unset.
   `provider.require_parameters`, so only an endpoint that honours the strict
   JSON schema serves it. It turns reasoning off. The ledger records the
   `usage.cost` that OpenRouter reports, which can be below the `MODELS` price.
+- A model id ending in `:free` is a free variant. Its `MODELS` price is 0, so
+  its `max_price` keeps any paid endpoint from serving it. OpenRouter allows 50
+  free requests a day, and 1,000 once the account has bought US$10 of credits.
+  An upstream provider can also answer 429 when it is busy, which stops a run.
+  Free providers may log prompts. The resolutions are public, so this is
+  acceptable for cards.
 
 ## Quotes
 

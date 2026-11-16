@@ -4,7 +4,8 @@ from urllib.parse import quote
 
 DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 DEFAULT_JUDGE_MODEL = "claude-sonnet-5-5"
-DEFAULT_CARD_MODEL = "claude-sonnet-5-5"
+# Free on OpenRouter. docs/cards.md gives the pilot that chose it.
+DEFAULT_CARD_MODEL = "nvidia/nemotron-3.5-super-vl:free"
 # What every process together may spend on language models in one Lima day.
 DEFAULT_DAILY_USD_CAP = 2.0
 # Set from the evaluation's refusal sweep; docs/cases.md gives the reason.
