@@ -68,11 +68,8 @@ export function App() {
   return (
     <main className={styles.shell}>
       <header className={styles.intro}>
-        <p className={`text-12 text-semibold ${styles.eyebrow}`}>
-          OSIPTEL · TRASU
-        </p>
-        <h1 className={styles.title}>Casos parecidos a tu reclamo</h1>
-        <p className={`text-body ${styles.lead}`}>
+        <h1 className="text-h1 text-balance">Casos parecidos a tu reclamo</h1>
+        <p className={`text-prose ${styles.lead}`}>
           Cuenta tu problema con tu empresa de telefonía, internet o cable. Te
           mostramos resoluciones públicas del tribunal de OSIPTEL sobre casos
           parecidos, con la cita de la resolución que respalda cada punto.
@@ -170,7 +167,7 @@ function Results({
   return (
     <section className={styles.results} aria-labelledby="results-title">
       <header className={styles.resultsHead}>
-        <h2 id="results-title" className="text-16 text-semibold">
+        <h2 id="results-title" className="text-h3">
           Casos parecidos
         </h2>
         <p className={styles.tally}>
