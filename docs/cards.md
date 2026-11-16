@@ -1,6 +1,6 @@
 # Cards
 
-A case card says what one resolution decided, in four short fields a reader can
+A case card says what one resolution decided, in five short fields a reader can
 compare with their own case. Cards are written offline by a language model and
 stored in the `cards` table. [`POST /cases`](cases.md) serves them with no model
 call, so visitors never spend model credit. The code is in
@@ -24,6 +24,11 @@ schema with these fields:
 | `operator_position` | What the operator said or decided before the appeal or queja |
 | `reasoning`         | Why the tribunal decided as it did                           |
 | `evidence`          | The evidence that decided the case, or the evidence missing  |
+| `orders`            | What the tribunal ordered the operator to do, or declared    |
+
+`orders` comes from the resolutive part: annul a charge, refund an amount,
+restore the service, report back. It says what the tribunal ordered, not whether
+the operator complied: a resolution is written before the operator acts on it.
 
 Each field is a list of up to three points, most important first. A point is a
 quote copied from the body and one plain sentence that says only what that quote

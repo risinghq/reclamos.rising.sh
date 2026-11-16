@@ -42,6 +42,10 @@ const CASE: FoundCase = {
       { text: "No hay grabación de la venta.", quote: "sin grabación" },
     ],
     evidence: [{ text: "El recibo de marzo.", quote: "recibo" }],
+    orders: [
+      { text: "La empresa debe anular el cobro.", quote: "anular el cobro" },
+      { text: "La empresa debe informar en 30 días.", quote: "informar" },
+    ],
   },
 };
 
@@ -84,7 +88,7 @@ describe("search page", () => {
     expect(screen.getByText(/no es asesoría legal/i)).toBeInTheDocument();
   });
 
-  it("shows each case closed to its claim and one reason, and opens the rest", async () => {
+  it("shows each case closed to its claim, one reason and one order, and opens the rest", async () => {
     const sent = answer(200, {
       query: "me cobran un plan",
       outcome: "found",
@@ -116,8 +120,13 @@ describe("search page", () => {
     expect(carded).toHaveTextContent("18 de marzo de 2024");
     expect(carded).toHaveTextContent("Resolución 00321-2024-TRASU/OSIPTEL");
     expect(carded).toHaveTextContent("La empresa no probó la contratación.");
+    expect(carded).toHaveTextContent("Qué ordenó el tribunal");
+    expect(carded).toHaveTextContent("La empresa debe anular el cobro.");
     expect(carded).not.toHaveTextContent("No hay grabación de la venta.");
     expect(carded).not.toHaveTextContent("El recibo de marzo.");
+    expect(carded).not.toHaveTextContent(
+      "La empresa debe informar en 30 días.",
+    );
     expect(inCard.getByText("«no acreditó»")).not.toBeVisible();
     expect(
       inCard.getByRole("link", { name: "Abrir la resolución (PDF)" }),
@@ -134,6 +143,7 @@ describe("search page", () => {
     expect(carded).toHaveTextContent("No hay grabación de la venta.");
     expect(carded).toHaveTextContent("Pruebas");
     expect(carded).toHaveTextContent("El recibo de marzo.");
+    expect(carded).toHaveTextContent("La empresa debe informar en 30 días.");
     await user.click(inCard.getAllByText("Ver cita")[0]!);
     expect(inCard.getByText("«no contrató el plan»")).toBeVisible();
 

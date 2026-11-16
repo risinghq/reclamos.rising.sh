@@ -140,7 +140,9 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
 
     out = cards("report", model=model, capsys=capsys)
     assert "cards: 4 (4 current)" in out
-    assert "points: claim 4, operator_position 0, reasoning 0, evidence 4" in out
+    assert (
+        "points: claim 4, operator_position 0, reasoning 0, evidence 4, orders 0" in out
+    )
     assert "dropped: 12 points" in out
     assert "judged: 4, faithful 0 (0.0%)" in out
     assert "unsupported points by field: claim 4" in out

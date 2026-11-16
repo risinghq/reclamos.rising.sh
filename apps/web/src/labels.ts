@@ -44,6 +44,7 @@ export const CARD_FIELDS: [CardField, string][] = [
   ["operator_position", "Qué respondió la empresa"],
   ["reasoning", "Por qué decidió así el tribunal"],
   ["evidence", "Pruebas"],
+  ["orders", "Qué ordenó el tribunal"],
 ];
 
 const DATE = new Intl.DateTimeFormat("es-PE", {

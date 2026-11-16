@@ -18,12 +18,19 @@ export function CaseCard({ found }: { found: FoundCase }) {
     return points?.length ? [{ name, title, points }] : [];
   });
   const claim = found.card?.claim?.[0];
-  // Closed, the card shows the claim as its title and one point of the
-  // tribunal's reasoning, which is what a visitor compares with their problem.
-  const first =
-    fields.find((field) => field.name === "reasoning") ??
-    fields.find((field) => field.name !== "claim");
-  const summary = first ? [{ ...first, points: first.points.slice(0, 1) }] : [];
+  // Closed, the card shows the claim as its title, one point of the
+  // tribunal's reasoning and one of what it ordered: what a visitor compares
+  // with their problem, and what came of the case.
+  const reasons = fields.find((field) => field.name === "reasoning");
+  const orders = fields.find((field) => field.name === "orders");
+  const closed =
+    reasons || orders
+      ? [reasons, orders].filter((field) => field !== undefined)
+      : fields.filter((field) => field.name !== "claim").slice(0, 1);
+  const summary = closed.map((field) => ({
+    ...field,
+    points: field.points.slice(0, 1),
+  }));
   const shown = (claim ? 1 : 0) + summary.length;
   const more = fields.reduce((n, field) => n + field.points.length, 0) > shown;
   const reference = found.number

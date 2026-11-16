@@ -6,7 +6,8 @@ export type CardField =
   | "claim"
   | "operator_position"
   | "reasoning"
-  | "evidence";
+  | "evidence"
+  | "orders";
 
 export type FoundCase = {
   resolution_id: number;
