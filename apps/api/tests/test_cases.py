@@ -116,6 +116,27 @@ def test_no_case_is_shown_below_the_similarity_threshold(
     assert found == {
         "query": "cobro indebido",
         "outcome": "no_similar_case",
+        "brands": [],
         "outcomes": {},
         "cases": [],
     }
+
+
+def test_a_named_brand_puts_its_cases_first_and_keeps_the_rest_in_order(
+    indexed: Settings, embedder: HashingEmbedder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    problem = "me activaron un contrato que no solicité"
+    plain = find(indexed, embedder, monkeypatch, 0.0, query=problem, limit=10)
+    named = find(
+        indexed, embedder, monkeypatch, 0.0, query=f"Entel: {problem}", limit=10
+    )
+
+    order = [case["resolution_id"] for case in plain["cases"]]
+    assert order[0] != ENTEL, "without the brand another case ranks first"
+    assert named["brands"] == ["Entel"]
+    assert [case["resolution_id"] for case in named["cases"]] == [ENTEL] + [
+        resolution for resolution in order if resolution != ENTEL
+    ]
+    brands = {case["resolution_id"]: case["brand"] for case in named["cases"]}
+    assert brands[ENTEL] == "Entel" and brands[BILLING] == "Claro"
+    assert all(case["pdf_url"] for case in named["cases"])

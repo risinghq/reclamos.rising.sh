@@ -26,23 +26,26 @@ class Filters:
     outcome: str | None = None
     date_from: date | None = None
     date_to: date | None = None
+    # Any of these operators, on top of `operator`.
+    operators: tuple[str, ...] = ()
 
     def where(self, first_parameter: int) -> tuple[str, list[Any]]:
         """An SQL condition over `r` (resolutions) and its parameters, numbered
         from `first_parameter`."""
         conditions: list[str] = []
         values: list[Any] = []
-        for column, operator, value in (
-            ("r.claim_type", "=", self.claim_type),
-            ("r.operator", "=", self.operator),
-            ("r.outcome", "=", self.outcome),
-            ("r.resolved_on", ">=", self.date_from),
-            ("r.resolved_on", "<=", self.date_to),
+        for condition, value in (
+            ("r.claim_type = {}", self.claim_type),
+            ("r.operator = {}", self.operator),
+            ("r.outcome = {}", self.outcome),
+            ("r.resolved_on >= {}", self.date_from),
+            ("r.resolved_on <= {}", self.date_to),
+            ("r.operator = ANY({})", list(self.operators) or None),
         ):
             if value is not None:
                 values.append(value)
                 conditions.append(
-                    f"{column} {operator} ${first_parameter + len(values) - 1}"
+                    condition.format(f"${first_parameter + len(values) - 1}")
                 )
         return " AND ".join(conditions) or "true", values
 
@@ -177,7 +180,8 @@ async def _attach_chunks(connection: Any, hits: list[Hit]) -> None:
         """
         SELECT c.resolution_id, c.ordinal, c.section, c.page_start, c.page_end,
                c.char_start, c.char_end, c.text,
-               r.expediente, r.number, r.resolved_on, r.operator, r.claim_type, r.outcome, r.page_url
+               r.expediente, r.number, r.resolved_on, r.operator, r.claim_type, r.outcome, r.page_url,
+               r.pdf_url
         FROM unnest($1::bigint[], $2::integer[]) AS wanted (resolution_id, ordinal)
         JOIN chunks c USING (resolution_id, ordinal)
         JOIN resolutions r ON r.id = c.resolution_id
