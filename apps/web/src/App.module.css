@@ -51,6 +51,11 @@
   gap: var(--but-space-md);
 }
 
+.brands {
+  margin: 0;
+  color: var(--but-muted-foreground);
+}
+
 .bones {
   display: grid;
   gap: var(--but-space-md);

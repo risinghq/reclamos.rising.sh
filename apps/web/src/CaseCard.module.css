@@ -18,15 +18,36 @@
 
 .body {
   display: grid;
-  gap: var(--but-padding-card);
+  padding-block: 0;
+}
+
+/* Each part of the case under its own heading, a rule between parts, so the
+   claim, the company's answer and the tribunal's reasons read apart. */
+.part {
+  display: grid;
+  gap: var(--but-space-lg);
+  padding-block: var(--but-padding-card);
+  border-top: 1px solid var(--but-border);
+}
+
+.title {
+  margin: 0;
+  color: var(--but-foreground);
 }
 
 .points {
   display: grid;
-  gap: var(--but-space-2xl);
+  gap: var(--but-space-xl);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.cite > summary {
+  width: fit-content;
+  margin-top: var(--but-space-sm);
+  color: var(--but-muted-foreground);
+  cursor: pointer;
 }
 
 .quote {
@@ -35,4 +56,19 @@
   border-left: 2px solid var(--but-border);
   color: var(--but-muted-foreground);
   line-height: var(--but-font-line-height-body);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--but-space-lg);
+  border-top: 1px solid var(--but-border);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--but-space-2xl);
 }

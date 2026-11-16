@@ -177,6 +177,11 @@ function Results({
             </Badge>
           ))}
         </p>
+        {response.brands.length > 0 && (
+          <p className={`text-13 ${styles.brands}`}>
+            Primero, casos con {BRAND_LIST.format(response.brands)}.
+          </p>
+        )}
       </header>
       {response.cases.map((found) => (
         <CaseCard key={found.resolution_id} found={found} />
@@ -184,6 +189,8 @@ function Results({
     </section>
   );
 }
+
+const BRAND_LIST = new Intl.ListFormat("es", { type: "disjunction" });
 
 function Loading() {
   return (
