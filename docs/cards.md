@@ -127,12 +127,28 @@ US$0.08 with Sonnet 5.5.
 
 ## Settings
 
-| Variable      | Default             | Meaning          |
-| ------------- | ------------------- | ---------------- |
-| `CARD_MODEL`  | `claude-sonnet-5-5` | Writes the cards |
-| `JUDGE_MODEL` | `claude-sonnet-5-5` | Judges the cards |
+| Variable      | Default                             | Meaning          |
+| ------------- | ----------------------------------- | ---------------- |
+| `CARD_MODEL`  | `nvidia/nemotron-3.5-super-vl:free` | Writes the cards |
+| `JUDGE_MODEL` | `claude-sonnet-5-5`                 | Judges the cards |
 
 Either may name any model in `MODELS` in `llm/client.py`.
+
+The writer is a free model because the judge drops every point it cannot
+support, so a weaker writer costs points, not accuracy. A pilot on 2026-11-16
+wrote cards for the same 10 resolutions with each writer, and Sonnet judged
+them:
+
+| Writer                              | Cards | Faithful | Points served | Cost    |
+| ----------------------------------- | ----- | -------- | ------------- | ------- |
+| `claude-sonnet-5-5`                 | 10    | 1 of 10  | 64 of 78      | US$0.33 |
+| `nvidia/nemotron-3.5-super-vl:free` | 9     | 3 of 8   | 53 of 62      | US$0    |
+| `inclusionai/ling-3.2-flash:free`   | 4     | 2 of 4   | 26 of 28      | US$0    |
+
+Nemotron cut one reply at the token cap and had 40 points dropped for a quote
+not in the text, against Sonnet's 13. Ling stopped on upstream rate limits after
+4 cards. At 50 free requests a day a full rebuild of 300 cards takes six days.
+The build resumes where it stopped.
 
 ## Tests
 

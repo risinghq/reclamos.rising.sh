@@ -120,6 +120,20 @@ MODELS = {
         price=Price(input=0.30, output=2.50),
         thinking_off=_OPENROUTER_NO_REASONING,
     ),
+    # Free variants: a zero `max_price` keeps any paid endpoint from serving
+    # them. OpenRouter allows 50 free requests a day, 1,000 once an account
+    # has bought US$10 of credits, and their providers may log prompts.
+    # https://openrouter.ai/docs/api/reference/limits, read 2026-11-16.
+    "nvidia/nemotron-3.5-super-vl:free": ModelSpec(
+        provider="openrouter",
+        price=Price(input=0.0, output=0.0),
+        thinking_off=_OPENROUTER_NO_REASONING,
+    ),
+    "inclusionai/ling-3.2-flash:free": ModelSpec(
+        provider="openrouter",
+        price=Price(input=0.0, output=0.0),
+        thinking_off=_OPENROUTER_NO_REASONING,
+    ),
 }
 
 MAX_PROMPT_CHARS = 40_000

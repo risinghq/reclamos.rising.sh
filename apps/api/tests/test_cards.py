@@ -67,7 +67,10 @@ def test_cards_are_built_within_a_budget_checked_judged_and_reported(
     indexed: Settings,
     embedder: HashingEmbedder,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The budget binds only on a priced writer, and the default one is free.
+    monkeypatch.setenv("CARD_MODEL", "claude-sonnet-5-5")
     # Each card reserves about US$0.04 and, at 3,000 output tokens, is billed
     # about US$0.03. The second card cannot fit in US$0.06.
     model = FakeModel(card_or_verdict, output_tokens=3000)
