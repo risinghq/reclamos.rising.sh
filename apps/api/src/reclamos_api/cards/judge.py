@@ -26,6 +26,7 @@ cita de la resolución que la respalda. Los campos son:
 apelación o la queja.
 - reasoning: por qué el tribunal decidió lo que decidió.
 - evidence: la prueba que decidió el caso, o la prueba que faltó.
+- orders: qué ordenó o declaró el tribunal en la parte resolutiva.
 
 Un punto es fiel cuando todo lo que afirma su oración está en su propia cita \
 y lo atribuye a quien lo dijo en ella: el usuario, la empresa o el tribunal. \

@@ -1,6 +1,6 @@
 """Write one resolution's case card with a language model, and check it.
 
-A card holds four fields a reader needs to compare their case with this one,
+A card holds five fields a reader needs to compare their case with this one,
 and the model's own reading of the outcome, the operator and the date. A field
 is a few points, each one sentence with the quote from the body that says it,
 so a reader can check every sentence against its own quote. A point whose quote
@@ -25,7 +25,7 @@ CARD_TIMEOUT_S = 180.0
 # Points kept per field. More would make the card harder to read, not truer.
 MAX_POINTS = 3
 
-FIELDS = ("claim", "operator_position", "reasoning", "evidence")
+FIELDS = ("claim", "operator_position", "reasoning", "evidence", "orders")
 READINGS = ("outcome", "operator", "resolved_on")
 OUTCOMES = (
     "fundado",
@@ -47,6 +47,9 @@ Campos de la ficha:
 apelación o la queja.
 - reasoning: por qué el tribunal decidió lo que decidió.
 - evidence: la prueba que decidió el caso, o la prueba que faltó.
+- orders: qué ordenó el tribunal en la parte resolutiva, por ejemplo que la \
+empresa anule un cobro, devuelva un monto, reponga el servicio o informe de \
+lo que hizo. Si no ordenó nada a la empresa, qué declaró.
 
 Cada campo es una lista de uno a tres puntos, del más importante al menos \
 importante. Un punto tiene:
