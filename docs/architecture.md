@@ -57,7 +57,9 @@ and the response.
 problem to `POST /cases` through `api.ts` and shows each case with
 `CaseCard.tsx`. `labels.ts` holds the Spanish names of claim types, outcomes and
 card fields. Vite builds it as a static client. `apps/web/vercel.json` owns the
-Vercel change filter for this workspace.
+Vercel change filter for this workspace. The page is built from GitButler's
+components in `packages/but-ui` and `packages/but-ui-react`; [Web](web.md)
+describes them.
 
 `packages/eval/src/reclamos_eval/retrieval.py` scores a ranking of resolutions
 (recall, MRR and nDCG), `questions.py` reads the judged question set,

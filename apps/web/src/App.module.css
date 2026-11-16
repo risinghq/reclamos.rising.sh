@@ -1,0 +1,83 @@
+.shell {
+  display: grid;
+  max-width: 40rem;
+  gap: calc(var(--but-gap-stack) * 4);
+  margin: 0 auto;
+  padding: 3rem 1rem 2rem;
+}
+
+.intro {
+  display: grid;
+  gap: var(--but-space-xl);
+}
+
+.eyebrow {
+  color: var(--but-subtle-foreground);
+  letter-spacing: 0.08em;
+}
+
+/* A consumer landing needs a larger head than the app's text-h1. */
+.title {
+  font-weight: var(--but-font-weight-semibold);
+  font-size: clamp(1.75rem, 6vw, 2.5rem);
+  line-height: var(--but-font-line-height-heading);
+  text-wrap: balance;
+}
+
+.lead {
+  max-width: 52ch;
+  color: var(--but-muted-foreground);
+  font-size: 1rem;
+}
+
+.search {
+  display: grid;
+  gap: var(--but-gap-fields);
+  padding: var(--but-padding-card);
+  border: 1px solid var(--but-border-subtle);
+  border-radius: var(--but-radius-card);
+  background-color: var(--but-background);
+}
+
+/* Mobile Safari zooms into a field set under 16px, so the query takes 16px. */
+.query {
+  font-size: 1rem;
+}
+
+.submit {
+  justify-self: start;
+}
+
+.results {
+  display: grid;
+  gap: var(--but-gap-stack);
+}
+
+.resultsHead {
+  display: grid;
+  gap: var(--but-space-lg);
+  margin-bottom: var(--but-space-lg);
+}
+
+.tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--but-space-md);
+}
+
+.bones {
+  display: grid;
+  gap: var(--but-space-md);
+  padding: var(--but-padding-card);
+  border: 1px solid var(--but-border-subtle);
+  border-radius: var(--but-radius-card);
+  background-color: var(--but-background);
+}
+
+.empty {
+  padding-block: 2rem;
+}
+
+.notice {
+  color: var(--but-subtle-foreground);
+}

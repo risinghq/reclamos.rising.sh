@@ -5,6 +5,8 @@
     "bun.lock",
     "uv.lock",
     "apps/api/tests/fixtures/**",
-    "packages/eval/data/**"
+    "packages/eval/data/**",
+    "packages/but-ui/**",
+    "packages/but-ui-react/**"
   ]
 }
