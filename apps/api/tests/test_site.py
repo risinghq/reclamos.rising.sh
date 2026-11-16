@@ -63,7 +63,7 @@ def test_the_listing_names_every_resolution() -> None:
     assert sorted(item.id for item in listing.items) == sorted(LISTED_IDS)
     assert {item.published_on for item in listing.items} == {PUBLISHED_ON}
     queja = next(item for item in listing.items if item.id == 6134941)
-    assert queja.expediente == "Expediente N.° 0038402-2022/TRASU/ST-RQJ"
+    assert queja.expediente == "0038402-2022/TRASU/ST-RQJ"
     assert queja.page_url == (
         "https://www.gob.pe/institucion/osiptel/normas-legales/"
         "6134941-0038402-2022-trasu-st-rqj"
