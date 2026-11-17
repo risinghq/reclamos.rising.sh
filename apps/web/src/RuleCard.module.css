@@ -1,0 +1,22 @@
+.rule > * {
+  padding: var(--but-padding-card);
+}
+
+.head {
+  display: grid;
+  gap: var(--but-space-md);
+}
+
+.citation {
+  margin: 0;
+  color: var(--but-muted-foreground);
+}
+
+.text {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.foot {
+  border-top: 1px solid var(--but-border);
+}

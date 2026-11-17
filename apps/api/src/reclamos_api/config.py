@@ -10,6 +10,8 @@ DEFAULT_CARD_MODEL = "nvidia/nemotron-3.5-super-vl:free"
 DEFAULT_DAILY_USD_CAP = 2.0
 # Set from the evaluation's refusal sweep; docs/cases.md gives the reason.
 DEFAULT_REFUSAL_MIN_SIMILARITY = 0.84
+DEFAULT_RULES_MIN_SIMILARITY = 0.83
+DEFAULT_RULES_MIN_TEXT_RANK = 0.02
 # Searches one client address may send a minute; 0 turns the limit off.
 DEFAULT_SEARCHES_PER_MINUTE = 30
 # The Vite dev server.
@@ -32,6 +34,8 @@ class Settings:
     card_model: str = DEFAULT_CARD_MODEL
     daily_usd_cap: float = DEFAULT_DAILY_USD_CAP
     refusal_min_similarity: float = DEFAULT_REFUSAL_MIN_SIMILARITY
+    rules_min_similarity: float = DEFAULT_RULES_MIN_SIMILARITY
+    rules_min_text_rank: float = DEFAULT_RULES_MIN_TEXT_RANK
     web_origins: tuple[str, ...] = DEFAULT_WEB_ORIGINS
     searches_per_minute: int = DEFAULT_SEARCHES_PER_MINUTE
 
@@ -52,6 +56,12 @@ class Settings:
             daily_usd_cap=float(os.environ.get("DAILY_USD_CAP", DEFAULT_DAILY_USD_CAP)),
             refusal_min_similarity=float(
                 os.environ.get("REFUSAL_MIN_SIMILARITY", DEFAULT_REFUSAL_MIN_SIMILARITY)
+            ),
+            rules_min_similarity=float(
+                os.environ.get("RULES_MIN_SIMILARITY", DEFAULT_RULES_MIN_SIMILARITY)
+            ),
+            rules_min_text_rank=float(
+                os.environ.get("RULES_MIN_TEXT_RANK", DEFAULT_RULES_MIN_TEXT_RANK)
             ),
             web_origins=_origins(os.environ.get("WEB_ORIGINS")),
             searches_per_minute=int(
@@ -74,7 +84,7 @@ def _database_url() -> str:
     port = os.environ.get("DB_PORT", "5432")
     name = os.environ.get("DB_NAME", "reclamos")
     user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASSWORD", "")
+    password = os.environ.get("DB_PASSWORD", "postgres")
     # RDS generates passwords with characters such as '#' and ':' that end a
     # URL's credentials, so both parts are percent-encoded.
     credentials = quote(user, safe="")

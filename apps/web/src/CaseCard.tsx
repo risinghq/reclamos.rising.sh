@@ -43,6 +43,9 @@ export function CaseCard({ found }: { found: FoundCase }) {
         <Badge variant={outcomeBadge(found.outcome)}>
           {outcomeLabel(found.outcome)}
         </Badge>
+        {found.is_precedent && (
+          <Badge variant="blue">Precedente de observancia obligatoria</Badge>
+        )}
         <h3 className="text-15 text-semibold text-balance">
           {claim ? claim.text : reference}
         </h3>

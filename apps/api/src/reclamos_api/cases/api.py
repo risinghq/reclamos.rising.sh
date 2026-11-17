@@ -16,6 +16,7 @@ from reclamos_api.cases.find import (
 from reclamos_api.outcomes.serve import Statistics, statistics
 from reclamos_api.retrieval.api import QueryRequest
 from reclamos_api.retrieval.search import IndexModelMismatch
+from reclamos_api.rules.find import Rule, find_rules
 
 
 class CasesRequest(QueryRequest):
@@ -47,6 +48,7 @@ class FoundCase(BaseModel):
     url: str
     pdf_url: str | None
     similarity: float
+    is_precedent: bool
     passage: Passage
     # Absent until the resolution has a judged card. Each point is one the
     # judge found backed by its quote.
@@ -61,6 +63,17 @@ class CasesResponse(BaseModel):
     brands: list[str]
     outcomes: dict[str, int]
     cases: list[FoundCase]
+    rules: list["FoundRule"]
+
+
+class FoundRule(BaseModel):
+    title: str
+    kind: str
+    label: str
+    approved_by: str
+    text_date: date
+    pdf_url: str
+    text: str
 
 
 router = APIRouter()
@@ -78,6 +91,15 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
             min_similarity=state.min_similarity,
             filters=body.filters(),
         )
+        rules: list[Rule] = []
+        if found:
+            rules = await find_rules(
+                state.pool,
+                state.embedder,
+                query=body.query,
+                min_similarity=state.rules_min_similarity,
+                min_text_rank=state.rules_min_text_rank,
+            )
     except IndexModelMismatch as mismatch:
         raise HTTPException(status_code=503, detail=str(mismatch)) from None
     counted = await statistics(
@@ -92,6 +114,7 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
             _found_case(case, counted.get(case.passage.fields["expediente"]))
             for case in found
         ],
+        rules=[_found_rule(rule) for rule in rules],
     )
 
 
@@ -109,6 +132,7 @@ def _found_case(case: Case, counted: Statistics | None) -> FoundCase:
         url=fields["page_url"],
         pdf_url=fields["pdf_url"],
         similarity=round(case.similarity, 4),
+        is_precedent=fields["is_precedent"],
         passage=Passage(
             ordinal=case.passage.ordinal,
             section=fields["section"],
@@ -123,4 +147,16 @@ def _found_case(case: Case, counted: Statistics | None) -> FoundCase:
             for name, points in case.card.items()
         },
         statistics=counted,
+    )
+
+
+def _found_rule(rule: Rule) -> FoundRule:
+    return FoundRule(
+        title=rule.title,
+        kind=rule.kind,
+        label=rule.label,
+        approved_by=rule.approved_by,
+        text_date=rule.text_date,
+        pdf_url=rule.pdf_url,
+        text=rule.text,
     )

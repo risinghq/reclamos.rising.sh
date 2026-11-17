@@ -21,6 +21,7 @@ export type FoundCase = {
   url: string;
   pdf_url: string | null;
   similarity: number;
+  is_precedent: boolean;
   passage: {
     ordinal: number;
     section: string;
@@ -60,12 +61,23 @@ export type Statistics = {
   concepts: ConceptStatistics[];
 };
 
+export type FoundRule = {
+  title: string;
+  kind: string;
+  label: string;
+  approved_by: string;
+  text_date: string;
+  pdf_url: string;
+  text: string;
+};
+
 export type CasesResponse = {
   query: string;
   outcome: "found" | "no_similar_case";
   brands: string[];
   outcomes: Record<string, number>;
   cases: FoundCase[];
+  rules: FoundRule[];
 };
 
 export type CasesRequest = { query: string; claim_type?: string };

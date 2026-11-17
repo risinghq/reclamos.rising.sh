@@ -28,6 +28,7 @@ from reclamos_api.llm.client import (
 from reclamos_api.outcomes import commands as outcome_commands
 from reclamos_api.outcomes.source import SourceError
 from reclamos_api.retrieval.embedder import Embedder, embedder_from_settings
+from reclamos_api.rules.sync import sync as sync_rules
 
 FIRST_PUBLISHED = date(2003, 1, 1)
 LIMA = ZoneInfo("America/Lima")
@@ -118,6 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     loading.add_argument(
         "--zip", type=Path, default=None, help="read this zip instead of downloading it"
+    )
+
+    rules = commands.add_parser("rules", help="download and index binding rules")
+    rules.add_subparsers(dest="action", required=True).add_parser(
+        "sync", help="download, consolidate and embed the current legal text"
     )
 
     gate = commands.add_parser("gate", help="the CI regression gate")
@@ -212,6 +218,16 @@ async def run(
         return await run_cards(arguments, settings, model)
     if arguments.command == "outcomes":
         return await outcome_commands.load(settings, arguments.zip)
+    if arguments.command == "rules":
+        async with database_pool(
+            settings.database_url, queue_schema=settings.queue_schema
+        ) as pool:
+            counts = await sync_rules(
+                pool,
+                store_from_settings(settings),
+                embedder or embedder_from_settings(settings),
+            )
+        return "\n".join(f"{slug}: {count}" for slug, count in counts.items())
     if arguments.action in ("crawl", "reindex"):
         fetcher = fetcher or Fetcher.create()
         embedder = embedder or embedder_from_settings(settings)

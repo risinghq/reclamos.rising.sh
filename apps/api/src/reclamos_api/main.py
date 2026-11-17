@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
         app.state.queue_schema = settings.queue_schema
         app.state.embedder = app.state.embedder or embedder_from_settings(settings)
         app.state.min_similarity = settings.refusal_min_similarity
+        app.state.rules_min_similarity = settings.rules_min_similarity
+        app.state.rules_min_text_rank = settings.rules_min_text_rank
         yield
 
 

@@ -79,7 +79,7 @@ async def search(
     vector = await embedder.embed_query(query) if mode != "text" else None
     async with pool.acquire() as connection:
         if vector is not None:
-            await _require_index_model(connection, embedder.model)
+            await require_index_model(connection, embedder.model)
             vector_ranking = await _vector_ranking(connection, vector, filters)
         if mode in ("hybrid", "text"):
             text_ranking = await _text_ranking(connection, query, filters)
@@ -93,7 +93,7 @@ class IndexModelMismatch(Exception):
     vectors, so their distances mean nothing."""
 
 
-async def _require_index_model(connection: Any, model: str) -> None:
+async def require_index_model(connection: Any, model: str) -> None:
     held = await connection.fetchval("SELECT model FROM embedding_model")
     # No row yet: nothing has been embedded, so no vector can disagree.
     if held is not None and held != model:
@@ -182,6 +182,7 @@ async def _attach_chunks(connection: Any, hits: list[Hit]) -> None:
                c.char_start, c.char_end, c.text,
                r.expediente, r.number, r.resolved_on, r.operator, r.claim_type, r.outcome, r.page_url,
                r.pdf_url
+               , r.is_precedent
         FROM unnest($1::bigint[], $2::integer[]) AS wanted (resolution_id, ordinal)
         JOIN chunks c USING (resolution_id, ordinal)
         JOIN resolutions r ON r.id = c.resolution_id

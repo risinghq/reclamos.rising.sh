@@ -108,6 +108,53 @@ CREATE INDEX IF NOT EXISTS chunks_embedding_idx
 CREATE INDEX IF NOT EXISTS resolutions_filter_idx
     ON resolutions (claim_type, outcome, resolved_on);
 
+ALTER TABLE resolutions
+    ADD COLUMN IF NOT EXISTS is_precedent boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS rule_documents (
+    slug text PRIMARY KEY,
+    title text NOT NULL,
+    kind text NOT NULL CHECK (kind IN (
+        'precedente', 'lineamiento', 'reglamento', 'condiciones', 'modificatoria'
+    )),
+    approved_by text NOT NULL,
+    text_date date NOT NULL,
+    pdf_url text NOT NULL,
+    pdf_key text NOT NULL,
+    pdf_sha256 text NOT NULL,
+    body text NOT NULL,
+    source_sha256 text NOT NULL DEFAULT '',
+    build_sha256 text NOT NULL,
+    visitor_searchable boolean NOT NULL DEFAULT true,
+    synced_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE rule_documents
+    ADD COLUMN IF NOT EXISTS visitor_searchable boolean NOT NULL DEFAULT true;
+
+ALTER TABLE rule_documents
+    ADD COLUMN IF NOT EXISTS source_sha256 text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS rule_passages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    document_slug text NOT NULL REFERENCES rule_documents (slug) ON DELETE CASCADE,
+    ordinal integer NOT NULL,
+    label text NOT NULL,
+    text_source text NOT NULL,
+    text_date date NOT NULL,
+    pdf_url text NOT NULL,
+    text text NOT NULL,
+    search tsvector GENERATED ALWAYS AS (to_tsvector('spanish_unaccent', text)) STORED,
+    embedding vector(1024),
+    UNIQUE (document_slug, ordinal)
+);
+
+ALTER TABLE rule_passages DROP COLUMN IF EXISTS approved_by;
+
+CREATE INDEX IF NOT EXISTS rule_passages_search_idx ON rule_passages USING gin (search);
+CREATE INDEX IF NOT EXISTS rule_passages_embedding_idx
+    ON rule_passages USING hnsw (embedding vector_cosine_ops);
+
 -- One call to a language model. `reserved_usd` is the most the call can cost,
 -- written before the call; `usd` is what it was billed, written after. A call
 -- with no `usd` is in flight and counts at `reserved_usd` (llm/spend.py).

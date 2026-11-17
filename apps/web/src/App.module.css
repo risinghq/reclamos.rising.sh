@@ -72,3 +72,19 @@
 .notice {
   color: var(--but-subtle-foreground);
 }
+
+.rules {
+  display: grid;
+  gap: var(--but-gap-stack);
+  margin-top: calc(var(--but-gap-stack) * 2);
+}
+
+.rulesHead {
+  display: grid;
+  gap: var(--but-space-md);
+}
+
+.rulesLead {
+  margin: 0;
+  color: var(--but-muted-foreground);
+}

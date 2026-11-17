@@ -76,7 +76,12 @@ def _visible(text: str) -> int:
     return len(re.sub(r"\s", "", text))
 
 
-async def extract_text(pdf: bytes) -> Extracted:
+async def extract_text(
+    pdf: bytes,
+    *,
+    ocr_dpi: int = OCR_DPI,
+    ocr_page_segmentation: str = OCR_PAGE_SEGMENTATION,
+) -> Extracted:
     _require_tools(ocr=False)
     with tempfile.TemporaryDirectory(prefix="reclamos-extract-") as directory:
         source = Path(directory) / "source.pdf"
@@ -98,7 +103,12 @@ async def extract_text(pdf: bytes) -> Extracted:
         if scanned:
             _require_tools(ocr=True)
         for index in scanned:
-            texts[index] = await _ocr_page(source, index + 1)
+            texts[index] = await _ocr_page(
+                source,
+                index + 1,
+                dpi=ocr_dpi,
+                page_segmentation=ocr_page_segmentation,
+            )
 
     if len(scanned) == pages:
         method = "ocr"
@@ -112,12 +122,14 @@ async def extract_text(pdf: bytes) -> Extracted:
     return Extracted(text=text, method=method, pages=pages, ocr_pages=len(scanned))
 
 
-async def _ocr_page(source: Path, page: int) -> str:
+async def _ocr_page(
+    source: Path, page: int, *, dpi: int, page_segmentation: str
+) -> str:
     stem = source.parent / f"page-{page}"
     await _run(
         "pdftoppm",
         "-r",
-        str(OCR_DPI),
+        str(dpi),
         "-gray",
         "-png",
         "-f",
@@ -135,5 +147,5 @@ async def _ocr_page(source: Path, page: int) -> str:
         "-l",
         OCR_LANGUAGE,
         "--psm",
-        OCR_PAGE_SEGMENTATION,
+        page_segmentation,
     )

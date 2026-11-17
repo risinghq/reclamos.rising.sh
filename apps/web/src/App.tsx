@@ -13,6 +13,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { type CasesResponse, findCases, MAX_QUERY_CHARS } from "./api";
 import styles from "./App.module.css";
 import { CaseCard } from "./CaseCard";
+import { RuleCard } from "./RuleCard";
 import { CLAIM_TYPES, outcomeBadge, outcomeLabel } from "./labels";
 
 type Search =
@@ -152,16 +153,21 @@ function Results({
   const { response } = search;
   if (response.outcome === "no_similar_case") {
     return (
-      <EmptyState
-        className={styles.empty}
-        illustration="papers"
-        title="No encontramos casos lo bastante parecidos"
-        description="Prueba contar el problema con otras palabras o con más detalle."
-      >
-        {onSearchAllTypes && (
-          <Button onClick={onSearchAllTypes}>Buscar en todos los tipos</Button>
-        )}
-      </EmptyState>
+      <>
+        <EmptyState
+          className={styles.empty}
+          illustration="papers"
+          title="No encontramos casos lo bastante parecidos"
+          description="Prueba contar el problema con otras palabras o con más detalle."
+        >
+          {onSearchAllTypes && (
+            <Button onClick={onSearchAllTypes}>
+              Buscar en todos los tipos
+            </Button>
+          )}
+        </EmptyState>
+        <Rules rules={response.rules} />
+      </>
     );
   }
   return (
@@ -185,6 +191,27 @@ function Results({
       </header>
       {response.cases.map((found) => (
         <CaseCard key={found.resolution_id} found={found} />
+      ))}
+      <Rules rules={response.rules} />
+    </section>
+  );
+}
+
+function Rules({ rules }: { rules: CasesResponse["rules"] }) {
+  if (!rules.length) return null;
+  return (
+    <section className={styles.rules} aria-labelledby="rules-title">
+      <header className={styles.rulesHead}>
+        <h2 id="rules-title" className="text-h3">
+          Normas que aplican
+        </h2>
+        <p className={`text-prose ${styles.rulesLead}`}>
+          Estas son normas vigentes relacionadas con tu problema. Se muestran
+          junto con casos parecidos y no reemplazan asesoría legal.
+        </p>
+      </header>
+      {rules.map((rule) => (
+        <RuleCard key={`${rule.title}-${rule.label}`} rule={rule} />
       ))}
     </section>
   );
