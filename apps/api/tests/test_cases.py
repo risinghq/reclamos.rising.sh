@@ -1,4 +1,6 @@
+import asyncio
 import json
+from datetime import date
 from typing import Any
 
 import httpx2
@@ -9,6 +11,7 @@ from reclamos_api.cards.card import PROMPT_VERSION
 from reclamos_api.cards.judge import JUDGE_VERSION
 from reclamos_api.cards.repository import body_sha256
 from reclamos_api.config import Settings
+from reclamos_api.corpus.repository import vector_literal
 from reclamos_api.main import create_app
 from test_search import BILLING, CONTRACT, ENTEL, QUEJA, bodies, query
 
@@ -119,6 +122,7 @@ def test_no_case_is_shown_below_the_similarity_threshold(
         "brands": [],
         "outcomes": {},
         "cases": [],
+        "rules": [],
     }
 
 
@@ -140,3 +144,132 @@ def test_a_named_brand_puts_its_cases_first_and_keeps_the_rest_in_order(
     brands = {case["resolution_id"]: case["brand"] for case in named["cases"]}
     assert brands[ENTEL] == "Entel" and brands[BILLING] == "Claro"
     assert all(case["pdf_url"] for case in named["cases"])
+
+
+def test_cases_serves_current_rules_next_to_similar_cases(
+    indexed: Settings, embedder: HashingEmbedder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RULES_MIN_SIMILARITY", "0")
+    vector = asyncio.run(
+        embedder.embed_passages(["La empresa debe anular el cobro no reconocido."])
+    )[0]
+    query(
+        indexed,
+        """
+        INSERT INTO rule_documents (slug, title, kind, approved_by, text_date, pdf_url,
+                                    pdf_key, pdf_sha256, body, build_sha256)
+        VALUES ('reglamento', 'Reglamento de Reclamos', 'reglamento', 'Res. 099',
+                $1, 'https://rules.test/reglamento.pdf', 'rules/reglamento.pdf',
+                'hash', 'Artículo 48', 'build')
+        """,
+        date(2026, 10, 3),
+    )
+    query(
+        indexed,
+        """
+        INSERT INTO rule_passages (document_slug, ordinal, label, text_source, text_date,
+                                   pdf_url, text, embedding)
+        VALUES ('reglamento', 0, 'Artículo 48', 'Res. 000129-2026-CD/OSIPTEL',
+                $1, 'https://rules.test/reglamento.pdf', $2, $3::vector)
+        """,
+        date(2026, 10, 3),
+        "La empresa debe anular el cobro no reconocido.",
+        vector_literal(vector),
+    )
+
+    found = find(
+        indexed,
+        embedder,
+        monkeypatch,
+        0.0,
+        query="cobro no reconocido que debe anularse",
+    )
+
+    assert found["rules"] == [
+        {
+            "title": "Reglamento de Reclamos",
+            "kind": "reglamento",
+            "label": "Artículo 48",
+            "approved_by": "Res. 000129-2026-CD/OSIPTEL",
+            "text_date": "2026-10-03",
+            "pdf_url": "https://rules.test/reglamento.pdf",
+            "text": "La empresa debe anular el cobro no reconocido.",
+        }
+    ]
+
+    no_similar_case = find(
+        indexed,
+        embedder,
+        monkeypatch,
+        1.01,
+        query="cobro no reconocido que debe anularse",
+    )
+
+    assert no_similar_case["outcome"] == "no_similar_case"
+    assert no_similar_case["rules"] == []
+
+
+def test_cases_excludes_nonvisitor_and_nonlexical_rules(
+    indexed: Settings, embedder: HashingEmbedder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RULES_MIN_SIMILARITY", "0")
+    monkeypatch.setenv("RULES_MIN_TEXT_RANK", "0")
+    vector = asyncio.run(embedder.embed_query("cobro no reconocido"))
+    for slug, title, searchable, text in (
+        (
+            "sanciones",
+            "Precedente sancionador",
+            False,
+            "Cobro no reconocido en una multa administrativa.",
+        ),
+        (
+            "generico",
+            "Pasaje genérico",
+            True,
+            "La resolución cumple el procedimiento administrativo.",
+        ),
+        (
+            "regla",
+            "Reglamento de Reclamos",
+            True,
+            "El usuario puede reclamar un cobro no reconocido.",
+        ),
+    ):
+        query(
+            indexed,
+            """
+            INSERT INTO rule_documents (slug, title, kind, approved_by, text_date, pdf_url,
+                                        pdf_key, pdf_sha256, body, source_sha256, build_sha256,
+                                        visitor_searchable)
+            VALUES ($1, $2, 'precedente', 'Res. 1', $3, 'https://rules.test/rule.pdf',
+                    'rules/rule.pdf', $1, $4, 'source', 'build', $5)
+            """,
+            slug,
+            title,
+            date(2026, 1, 1),
+            text,
+            searchable,
+        )
+        query(
+            indexed,
+            """
+            INSERT INTO rule_passages (document_slug, ordinal, label, text_source, text_date,
+                                       pdf_url, text, embedding)
+            VALUES ($1, 0, 'Pasaje 1', 'Res. 1', $2, 'https://rules.test/rule.pdf', $3,
+                    $4::vector)
+            """,
+            slug,
+            date(2026, 1, 1),
+            text,
+            vector_literal(vector),
+        )
+
+    found = find(
+        indexed,
+        embedder,
+        monkeypatch,
+        0.0,
+        query="cobro no reconocido",
+    )
+
+    assert [rule["title"] for rule in found["rules"]] == ["Reglamento de Reclamos"]

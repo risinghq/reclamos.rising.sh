@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CasesResponse, FoundCase } from "./api";
+import type { CasesResponse, FoundCase, FoundRule } from "./api";
 import { App } from "./App";
 
 const CASE: FoundCase = {
@@ -23,6 +23,7 @@ const CASE: FoundCase = {
   url: "https://www.gob.pe/institucion/osiptel/normas-legales/1",
   pdf_url: "https://cdn.www.gob.pe/uploads/document/file/1/res.pdf",
   similarity: 0.87,
+  is_precedent: false,
   passage: {
     ordinal: 3,
     section: "analisis",
@@ -87,6 +88,16 @@ const STATISTICS: FoundCase["statistics"] = {
   ],
 };
 
+const RULE: FoundRule = {
+  title: "TUO del Reglamento de Reclamos",
+  kind: "reglamento",
+  label: "Artículo 48",
+  approved_by: "Res. 000129-2026-CD/OSIPTEL",
+  text_date: "2026-10-03",
+  pdf_url: "https://www.osiptel.gob.pe/media/reglamento.pdf",
+  text: "La empresa debe responder el reclamo dentro del plazo aplicable.",
+};
+
 function answer(status: number, body?: CasesResponse) {
   const fetch = vi.fn<typeof globalThis.fetch>(
     async () => new Response(JSON.stringify(body ?? {}), { status }),
@@ -136,6 +147,7 @@ describe("search page", () => {
         CASE,
         { ...CASE, resolution_id: 9, number: null, outcome: null, card: null },
       ],
+      rules: [RULE],
     });
 
     await searchFor("  me cobran un plan  ", "Cobros y recibos");
@@ -148,6 +160,13 @@ describe("search page", () => {
       claim_type: "billing",
     });
     expect(screen.getByText("Primero, casos con Claro.")).toBeInTheDocument();
+    const rules = screen.getByRole("region", { name: "Normas que aplican" });
+    expect(rules).toHaveTextContent("Normas que aplican");
+    expect(rules).toHaveTextContent(RULE.text);
+    expect(rules).toHaveTextContent("Artículo 48");
+    expect(
+      within(rules).getByRole("link", { name: "Abrir la norma (PDF)" }),
+    ).toHaveAttribute("href", RULE.pdf_url);
     const [carded, bare] = screen.getAllByRole("article");
     const inCard = within(carded);
     expect(inCard.getByRole("heading", { level: 3 })).toHaveTextContent(
@@ -201,6 +220,7 @@ describe("search page", () => {
         { ...CASE, statistics: STATISTICS },
         { ...CASE, resolution_id: 9 },
       ],
+      rules: [],
     });
 
     await searchFor("me cobran el cargo fijo");
@@ -244,6 +264,7 @@ describe("search page", () => {
           brands: [],
           outcomes: {},
           cases: [],
+          rules: [],
         }),
       /no encontramos casos/i,
     ],

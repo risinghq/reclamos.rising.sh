@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+import reclamos_api.corpus.extract as extraction
 from gobpe import FIXTURES
 from reclamos_api.corpus.extract import ExtractionError, extract_text, missing_tools
 from textpdf import text_pdf
@@ -33,6 +34,32 @@ def test_a_scan_is_read_by_ocr() -> None:
     assert extracted.pages == extracted.ocr_pages == 3
     assert "TRASU/ST-RQJ" in extracted.text
     assert "IMPROCEDENTE" in extracted.text
+
+
+@needs_ocr
+def test_a_scan_can_select_its_ocr_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, str]] = []
+
+    async def ocr_page(
+        _source: object, page: int, *, dpi: int, page_segmentation: str
+    ) -> str:
+        calls.append((dpi, page_segmentation))
+        return f"página {page} con texto suficiente para contar como texto"
+
+    monkeypatch.setattr(extraction, "_ocr_page", ocr_page)
+
+    extracted = asyncio.run(
+        extract_text(
+            (FIXTURES / "6134941.pdf").read_bytes(),
+            ocr_dpi=300,
+            ocr_page_segmentation="3",
+        )
+    )
+
+    assert extracted.method == "ocr"
+    assert calls == [(300, "3")] * extracted.pages
 
 
 @needs_poppler
