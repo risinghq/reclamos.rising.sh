@@ -13,6 +13,7 @@ from reclamos_api.cases.find import (
     find_cases,
     outcome_counts,
 )
+from reclamos_api.outcomes.serve import Statistics, statistics
 from reclamos_api.retrieval.api import QueryRequest
 from reclamos_api.retrieval.search import IndexModelMismatch
 
@@ -50,6 +51,7 @@ class FoundCase(BaseModel):
     # Absent until the resolution has a judged card. Each point is one the
     # judge found backed by its quote.
     card: dict[str, list[CardPoint]] | None
+    statistics: Statistics | None
 
 
 class CasesResponse(BaseModel):
@@ -78,16 +80,22 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
         )
     except IndexModelMismatch as mismatch:
         raise HTTPException(status_code=503, detail=str(mismatch)) from None
+    counted = await statistics(
+        state.pool, [case.passage.fields["expediente"] for case in found]
+    )
     return CasesResponse(
         query=body.query,
         outcome="found" if found else "no_similar_case",
         brands=brands_named(body.query),
         outcomes=outcome_counts(found),
-        cases=[_found_case(case) for case in found],
+        cases=[
+            _found_case(case, counted.get(case.passage.fields["expediente"]))
+            for case in found
+        ],
     )
 
 
-def _found_case(case: Case) -> FoundCase:
+def _found_case(case: Case, counted: Statistics | None) -> FoundCase:
     fields = case.passage.fields
     return FoundCase(
         resolution_id=case.passage.resolution_id,
@@ -114,4 +122,5 @@ def _found_case(case: Case) -> FoundCase:
             name: [CardPoint(text=point.text, quote=point.quote) for point in points]
             for name, points in case.card.items()
         },
+        statistics=counted,
     )
