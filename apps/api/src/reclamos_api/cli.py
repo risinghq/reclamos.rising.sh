@@ -25,6 +25,8 @@ from reclamos_api.llm.client import (
     UnpricedModel,
     model_for,
 )
+from reclamos_api.outcomes import commands as outcome_commands
+from reclamos_api.outcomes.source import SourceError
 from reclamos_api.retrieval.embedder import Embedder, embedder_from_settings
 
 FIRST_PUBLISHED = date(2003, 1, 1)
@@ -106,6 +108,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=None, help="write at most N cards"
     )
     card_actions.add_parser("report", help="print what the cards hold and drop")
+
+    outcomes = commands.add_parser(
+        "outcomes", help="how the tribunal decided every file, from PUNKU"
+    )
+    outcome_actions = outcomes.add_subparsers(dest="action", required=True)
+    loading = outcome_actions.add_parser(
+        "load", help="replace the outcome tables with the PUNKU zip and count them"
+    )
+    loading.add_argument(
+        "--zip", type=Path, default=None, help="read this zip instead of downloading it"
+    )
 
     gate = commands.add_parser("gate", help="the CI regression gate")
     steps = gate.add_subparsers(dest="action", required=True)
@@ -197,6 +210,8 @@ async def run(
         return await run_gate(arguments, settings, embedder)
     if arguments.command == "cards":
         return await run_cards(arguments, settings, model)
+    if arguments.command == "outcomes":
+        return await outcome_commands.load(settings, arguments.zip)
     if arguments.action in ("crawl", "reindex"):
         fetcher = fetcher or Fetcher.create()
         embedder = embedder or embedder_from_settings(settings)
@@ -291,7 +306,7 @@ def main(
                 run(arguments, Settings.from_environment(), fetcher, embedder, model)
             )
         )
-    except (DatasetError, QuestionFileError) as error:
+    except (DatasetError, QuestionFileError, SourceError) as error:
         raise SystemExit(str(error)) from error
 
 

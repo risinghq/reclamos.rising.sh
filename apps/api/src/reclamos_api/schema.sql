@@ -149,3 +149,50 @@ CREATE TABLE IF NOT EXISTS cards (
     unsupported jsonb,
     judged_at timestamptz
 );
+
+CREATE TABLE IF NOT EXISTS outcome_source (
+    only_row boolean PRIMARY KEY DEFAULT true CHECK (only_row),
+    url text NOT NULL,
+    cut_on date NOT NULL,
+    loaded_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS outcome_decisions (
+    year smallint NOT NULL,
+    number integer NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('RA', 'RQJ')),
+    resolved_on date NOT NULL,
+    sentido text NOT NULL,
+    outcome text NOT NULL CHECK (
+        outcome IN ('fundado', 'fundado_en_parte', 'infundado', 'improcedente', 'other')
+    ),
+    company text NOT NULL,
+    brand text,
+    PRIMARY KEY (year, number, kind, resolved_on)
+);
+
+CREATE TABLE IF NOT EXISTS outcome_subjects (
+    year smallint NOT NULL,
+    number integer NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('RA', 'RQJ')),
+    concept text NOT NULL,
+    detail text NOT NULL,
+    PRIMARY KEY (year, number, kind, concept, detail)
+);
+
+CREATE TABLE IF NOT EXISTS outcome_stats (
+    kind text NOT NULL CHECK (kind IN ('RA', 'RQJ')),
+    concept text NOT NULL,
+    detail text NOT NULL,
+    brand text NOT NULL,
+    files integer NOT NULL CHECK (files > 0),
+    fundado integer NOT NULL,
+    fundado_en_parte integer NOT NULL,
+    infundado integer NOT NULL,
+    improcedente integer NOT NULL,
+    other integer NOT NULL,
+    first_year integer NOT NULL,
+    last_year integer NOT NULL,
+    PRIMARY KEY (kind, concept, detail, brand),
+    CHECK (files = fundado + fundado_en_parte + infundado + improcedente + other)
+);

@@ -385,6 +385,15 @@ wheels = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234, upload-time = "2024-10-25T17:25:40.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059, upload-time = "2024-10-25T17:25:39.051Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.162.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1018,6 +1027,18 @@ wheels = [
 ]
 
 [[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464, upload-time = "2024-06-28T14:03:44.161Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910, upload-time = "2024-06-28T14:03:41.161Z" },
+]
+
+[[package]]
 name = "opentelemetry-api"
 version = "1.45.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1221,6 +1242,28 @@ wheels = [
 ]
 
 [[package]]
+name = "python-calamine"
+version = "0.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/ec/923684e9d817b4b317942c9dd36a66cd213a3c0abcb3c58d2cb22e3a4355/python_calamine-0.9.1.tar.gz", hash = "sha256:458094c3dd41bd330c0a43d20e23489964ba28b3301687f1c5acc03c81d06a9f", size = 202382, upload-time = "2026-11-03T03:24:46.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/d4/88d777b8de1f7cb108cbfab330a0858dd874afe7e80906c7d1e3a861abfe/python_calamine-0.9.1-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:1345bf07329af2607923bbc39a6d61ce46185d56b3e796f22cb5bc61a3a70250", size = 888274, upload-time = "2026-11-03T03:22:40.194Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/2d/ce1cb9f116890ea2f3f89ed648da66c053c993d7ef3c083a1f77ceb27018/python_calamine-0.9.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:243b25a442a875e3c105a3fad32a895f626b0bcd07a049d6e479f29f745c3f54", size = 872100, upload-time = "2026-11-03T03:22:41.73Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/d3/99233558ef69d5bcba95667dfe04787b6c56fd9077f38dc0702149a14d85/python_calamine-0.9.1-cp313-cp313-manylinux1_i686.manylinux_2_5_i686.whl", hash = "sha256:a28f46bd0c33cf90ce3e7f5134644c6896da00e4fb07adf4752c2b15c5c4be54", size = 1015125, upload-time = "2026-11-03T03:22:43.734Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/f9/e3a7fbd0c2542b230d756918cd506b9cffb6384f1847e6b6ad0d9978837b/python_calamine-0.9.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3eb2726bdfa0b8798b17684a3ccbd9f701fa0cab314693fca5f2130ffad66e0a", size = 943752, upload-time = "2026-11-03T03:22:45.335Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/99/06c5316892dc7a7990cc64cc9bd38d363daa8142e15542b3467aec813772/python_calamine-0.9.1-cp313-cp313-manylinux2014_armv7l.manylinux_2_17_armv7l.whl", hash = "sha256:4e534854bce735ef181aedadb9619e3dbcfae2cf5284c7a68be026fd4fc5f604", size = 934781, upload-time = "2026-11-03T03:22:47.107Z" },
+    { url = "https://files.pythonhosted.org/packages/05/46/ef64641dcf36371122ffc782a90bf823d537b17f17c5bf40e10a2807fd03/python_calamine-0.9.1-cp313-cp313-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:01fc81b787af4a5f09c55d1ff7a940bf3a7a465cd2d512f559b91f89e0b0ffa7", size = 1101987, upload-time = "2026-11-03T03:22:49.27Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/77/705096200efdd886c966d008b4fb52599588564dbbdb71d1e840516bb3d3/python_calamine-0.9.1-cp313-cp313-manylinux2014_s390x.manylinux_2_17_s390x.whl", hash = "sha256:4a5511f9c3008f3203709fb899d11c2cbfff1e21113719c501d9865adf661ae8", size = 1027143, upload-time = "2026-11-03T03:22:50.867Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/39/d2aa009ca4f4c86392fff315d88c8b3b3c6e86d9bc645b9e94413d7a5db2/python_calamine-0.9.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c0f5c8ef50f3819bc28e5e26740837925f5ff2e06d0f229e63c98a3124ff54e4", size = 953087, upload-time = "2026-11-03T03:22:52.393Z" },
+    { url = "https://files.pythonhosted.org/packages/09/cc/bba5f565b26c6d5024f18b675de51b9eb246ff7a13839e61513f2cd0c921/python_calamine-0.9.1-cp313-cp313-musllinux_1_1_aarch64.whl", hash = "sha256:f4f52e85fffc420122c4c2943df130fbf88733c4ce5920ad3694946b1ac9cbf8", size = 1121050, upload-time = "2026-11-03T03:22:54.113Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/6d/346d344d393fe041865fc27bbc9e259091a8121b6e23c758953f8b319ed8/python_calamine-0.9.1-cp313-cp313-musllinux_1_1_armv7l.whl", hash = "sha256:c26b69a8e75e6373b84975a3904940265e6c1e9454b5af74c2581a8a9ff822b4", size = 1209641, upload-time = "2026-11-03T03:22:55.899Z" },
+    { url = "https://files.pythonhosted.org/packages/da/d7/7daa345953510419180b707fbf62bcc3c30e9134fb89b15d5408866cc4a8/python_calamine-0.9.1-cp313-cp313-musllinux_1_1_x86_64.whl", hash = "sha256:713e5a3a388b09674f90aa605cb1d138639941b89872ef684fe2e09192a268e9", size = 1165349, upload-time = "2026-11-03T03:22:57.757Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/35/cd4a2ea24f24cc6b835bf7a8ee80c159e3eb95484968e7686f9058b20f16/python_calamine-0.9.1-cp313-cp313-win32.whl", hash = "sha256:aef16cd395c32f757d95c9cde23d4a221da2d1353d2d9aabe8956a67c3c0f8b8", size = 761707, upload-time = "2026-11-03T03:22:59.368Z" },
+    { url = "https://files.pythonhosted.org/packages/de/bc/0c8cfef36b556271b94320b1daa65b2e40334d3a53030f033b36c8a57a41/python_calamine-0.9.1-cp313-cp313-win_amd64.whl", hash = "sha256:07654eafa80ce5eb1d3ccd2bce20c85f5858271d69a63745cdd7e2e761bedcb8", size = 787461, upload-time = "2026-11-03T03:23:00.785Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/ff/efc43a32ab45fcc45b467b2cd7eb38a6060a692c40e3eca9bb06ee2af6e3/python_calamine-0.9.1-cp313-cp313-win_arm64.whl", hash = "sha256:1118989223c93481f311b61a21bd1ddd25a2e2021f20fdef23edff6a63357c07", size = 765938, upload-time = "2026-11-03T03:23:02.619Z" },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
@@ -1280,6 +1323,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastembed" },
     { name = "httpx" },
+    { name = "python-calamine" },
     { name = "reclamos-eval" },
     { name = "rqueue" },
     { name = "selectolax" },
@@ -1290,8 +1334,10 @@ dependencies = [
 dev = [
     { name = "basedpyright" },
     { name = "moto", extra = ["server"] },
+    { name = "openpyxl" },
     { name = "pytest" },
     { name = "testcontainers" },
+    { name = "types-openpyxl" },
 ]
 
 [package.metadata]
@@ -1302,6 +1348,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.162.5" },
     { name = "fastembed", specifier = ">=0.9.1" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "python-calamine", specifier = ">=0.9.1" },
     { name = "reclamos-eval", editable = "packages/eval" },
     { name = "rqueue", git = "https://github.com/totallynotdavid/rqueue.git?rev=36dc2d9c8f53c2273fa61a8f6e3c8c2f0d98cd00" },
     { name = "selectolax", specifier = ">=1.0.2" },
@@ -1312,8 +1359,10 @@ requires-dist = [
 dev = [
     { name = "basedpyright", specifier = ">=1.39.9" },
     { name = "moto", extras = ["server"], specifier = ">=5.2.5" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.15.0" },
+    { name = "types-openpyxl", specifier = ">=3.1.5.20261017" },
 ]
 
 [[package]]
@@ -1629,6 +1678,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ee/9f/c5201d42a484c061e528825fc8e2d565f5abd50a4ced6fb7d29c4ec99b2b/truststore-0.10.5.tar.gz", hash = "sha256:30d36967ccaded5cbb38d602c433f53600036c79d502f4533a49b60a03bbefcd", size = 28091, upload-time = "2026-10-12T22:27:31.808Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/e9/3a7820be2bb0fe53b6bc9c3be26d3d1158004e4c3ab953aa6840b955b1e9/truststore-0.10.5-py3-none-any.whl", hash = "sha256:9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c", size = 19017, upload-time = "2026-10-12T22:27:30.377Z" },
+]
+
+[[package]]
+name = "types-openpyxl"
+version = "3.1.5.20261017"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/13/ce0b36e7e29ee31ec75d6718d48d28d2d48ad319ddf4665f81c8f3a8fc95/types_openpyxl-3.1.5.20261017.tar.gz", hash = "sha256:3deb3b6279b65ab379c126df0ee1fd27500c9628edb8d9667d73f637462917dc", size = 102026, upload-time = "2026-10-17T06:20:01.431Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/17/a091e90fde3e90eff9168354269626e210a4c3c688910d8c9176b8a08cb4/types_openpyxl-3.1.5.20261017-py3-none-any.whl", hash = "sha256:3315cfebad290cc7ade1fccaf3a46ee820b3a8e7df726ff4f18d30ab7f383d68", size = 165886, upload-time = "2026-10-17T06:19:59.944Z" },
 ]
 
 [[package]]
