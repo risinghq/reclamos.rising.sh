@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import type { CardPoint, FoundCase } from "./api";
 import styles from "./CaseCard.module.css";
 import { CARD_FIELDS, dateLabel, outcomeBadge, outcomeLabel } from "./labels";
+import { Statistics } from "./Statistics";
 
 type Field = { name: string; title: string; points: CardPoint[] };
 
@@ -73,6 +74,7 @@ export function CaseCard({ found }: { found: FoundCase }) {
           </section>
         )}
       </div>
+      {found.statistics && <Statistics statistics={found.statistics} />}
       <footer className={styles.foot}>
         {more && (
           <Button

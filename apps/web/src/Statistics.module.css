@@ -1,0 +1,46 @@
+.statistics {
+  display: grid;
+  gap: var(--but-space-lg);
+  border-top: 1px solid var(--but-border);
+}
+
+.statistics > h4 {
+  margin: 0;
+  color: var(--but-foreground);
+}
+
+.concepts {
+  display: grid;
+  gap: var(--but-space-xl);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.concepts > li {
+  display: grid;
+  gap: var(--but-space-sm);
+}
+
+.muted {
+  margin: 0;
+  color: var(--but-muted-foreground);
+}
+
+.terms {
+  display: grid;
+  gap: var(--but-space-sm);
+  margin: 0;
+  color: var(--but-muted-foreground);
+}
+
+.terms dt {
+  display: inline;
+  color: var(--but-foreground);
+  font-weight: var(--but-font-weight-semibold);
+}
+
+.terms dd {
+  display: inline;
+  margin: 0;
+}

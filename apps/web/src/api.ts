@@ -29,6 +29,35 @@ export type FoundCase = {
     text: string;
   };
   card: Partial<Record<CardField, CardPoint[]>> | null;
+  statistics: Statistics | null;
+};
+
+export type Outcome =
+  | "fundado"
+  | "fundado_en_parte"
+  | "infundado"
+  | "improcedente"
+  | "other";
+
+export type OutcomeCounts = {
+  files: number;
+  first_year: number;
+  last_year: number;
+  outcomes: Record<Outcome, number>;
+};
+
+export type ConceptStatistics = {
+  concept: string;
+  detail: string | null;
+  counts: OutcomeCounts;
+  brand: (OutcomeCounts & { brand: string }) | null;
+};
+
+export type Statistics = {
+  file_type: "RA" | "RQJ";
+  source: string;
+  cut_on: string;
+  concepts: ConceptStatistics[];
 };
 
 export type CasesResponse = {
