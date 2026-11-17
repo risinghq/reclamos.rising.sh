@@ -1,9 +1,9 @@
 # Cases
 
 `POST /cases` takes a visitor's description of their problem and returns the
-resolutions most like it, each with its [card](cards.md) when one is served. It
-makes no model call: the cards were written and judged offline. The code is in
-`apps/api/src/reclamos_api/cases/`.
+resolutions most like it, each with its [card](cards.md) when one is served, and
+the current [rules](rules.md) that match it. It makes no language-model call.
+The code is in `apps/api/src/reclamos_api/cases/`.
 
 | File        | Owns                                                   |
 | ----------- | ------------------------------------------------------ |
@@ -25,6 +25,8 @@ makes no model call: the cards were written and judged offline. The code is in
    legal names only. Up to `NAMED_BRAND_CASES` (2) of those cases go first, and
    the cases of step 3 follow without repeats, still up to `limit`.
 5. Attach each kept resolution's served card fields.
+6. Search the separate rules index and return up to three passages above
+   `RULES_MIN_SIMILARITY`.
 
 A resolution names the company by its legal name at the time, so `brands.py`
 maps each legal name to the brand a visitor knows: TIM and Telmex are Claro,
@@ -52,6 +54,17 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
   "outcome": "found",
   "brands": ["Movistar"],
   "outcomes": { "fundado": 3, "infundado": 2 },
+  "rules": [
+    {
+      "title": "TUO del Reglamento de Reclamos",
+      "kind": "reglamento",
+      "label": "Artículo 48",
+      "approved_by": "Res. 000129-2026-CD/OSIPTEL",
+      "text_date": "2026-10-03",
+      "pdf_url": "https://www.osiptel.gob.pe/...pdf",
+      "text": "..."
+    }
+  ],
   "cases": [
     {
       "resolution_id": 4211,

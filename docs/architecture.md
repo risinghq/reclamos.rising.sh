@@ -61,6 +61,12 @@ the counts, `commands.py` is `reclamos outcomes load`, and `serve.py` gives
 `POST /cases` the `statistics` of each case's file. [Outcomes](outcomes.md)
 describes the source and the match.
 
+`apps/api/src/reclamos_api/rules/` indexes fixed OSIPTEL legal sources apart
+from resolutions. `sources.py` owns the legal source inventory, `sync.py`
+downloads, extracts, consolidates and embeds it, and `find.py` returns the best
+current passages for `POST /cases`. [Rules](rules.md) describes the sources and
+consolidation.
+
 `apps/web/src/App.tsx` is the Spanish search page. It sends the visitor's
 problem to `POST /cases` through `api.ts` and shows each case with
 `CaseCard.tsx`. `labels.ts` holds the Spanish names of claim types, outcomes and
@@ -93,11 +99,11 @@ is an operator action.
 inserts the row before the call and settles it after.
 [Model calls](llm.md#spend-limits) gives the rules.
 
-Five tables of the database hold shared state: `resolutions` (one row per
-resolution), `chunks` (the passages of a resolution, with their vectors),
-`embedding_model` (one row naming the model that made those vectors),
-`listing_failures` (one row per listing window that could not be read) and the
-rqueue `jobs` table. The jobs run in whichever process claims them, the worker
+`rule_documents` holds each fixed legal source and `rule_passages` holds its
+current passages. The rules and resolution passages use the same
+`embedding_model` row. `resolutions`, `chunks`, `embedding_model`,
+`listing_failures` and the rqueue `jobs` table hold the corpus state. The jobs
+run in whichever process claims them, the worker
 (`python -m reclamos_api.worker`) or `reclamos corpus crawl`, so a row can be
 written by either. Jobs are queued by two kinds of actor:
 

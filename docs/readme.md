@@ -13,11 +13,13 @@
    and their cards, and its similarity threshold.
 7. [Outcomes](outcomes.md) describes how the tribunal's past decisions are
    loaded from OSIPTEL's open data and attached to each case.
-8. [Evaluation](evaluation.md) describes the judged questions, `reclamos eval`,
+8. [Rules](rules.md) describes the current legal-text index and
+   `reclamos rules sync`.
+9. [Evaluation](evaluation.md) describes the judged questions, `reclamos eval`,
    the CI gate and the latest results.
-9. [Web](web.md) describes the search page and the vendored GitButler
-   components.
-10. [Operations](operations.md) covers local services, checks, and deployment
+10. [Web](web.md) describes the search page and the vendored GitButler
+    components.
+11. [Operations](operations.md) covers local services, checks, and deployment
     verification.
 
 The root [README](../README.md) is the quick start for readers who want to run
