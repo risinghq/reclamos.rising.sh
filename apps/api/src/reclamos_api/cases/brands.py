@@ -21,7 +21,7 @@ BRANDS: dict[str, tuple[str, ...]] = {
     "Entel": ("ENTEL PERU S.A.", "NEXTEL DEL PERU S.A."),
     "Bitel": ("VIETTEL PERU S.A.C.",),
     "WOW": ("WOW TEL S.A.C.",),
-    "Win": ("WIN NET - TELECOM S.A.C.",),
+    "Win": ("WIN NET - TELECOM S.A.C.", "WI-NET TELECOM S.A.C."),
     "DirecTV": ("DIRECTV PERU S.R.L.",),
     "Americatel": ("AMERICATEL PERU S.A.",),
 }
