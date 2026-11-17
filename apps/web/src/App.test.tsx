@@ -47,6 +47,44 @@ const CASE: FoundCase = {
       { text: "La empresa debe informar en 30 días.", quote: "informar" },
     ],
   },
+  statistics: null,
+};
+
+const STATISTICS: FoundCase["statistics"] = {
+  file_type: "RA",
+  source: "https://punku.osiptel.gob.pe/Archivos/Datasets-PUNKU-OSIPTEL.zip",
+  cut_on: "2026-07-24",
+  concepts: [
+    {
+      concept: "facturación y cobro",
+      detail: "cargo fijo",
+      counts: {
+        files: 198403,
+        first_year: 2017,
+        last_year: 2026,
+        outcomes: {
+          fundado: 31744,
+          fundado_en_parte: 33729,
+          infundado: 19840,
+          improcedente: 95233,
+          other: 17857,
+        },
+      },
+      brand: {
+        brand: "Claro",
+        files: 1000,
+        first_year: 2018,
+        last_year: 2025,
+        outcomes: {
+          fundado: 200,
+          fundado_en_parte: 100,
+          infundado: 300,
+          improcedente: 398,
+          other: 2,
+        },
+      },
+    },
+  ],
 };
 
 function answer(status: number, body?: CasesResponse) {
@@ -151,6 +189,49 @@ describe("search page", () => {
     expect(bare).toHaveTextContent("Resultado sin leer");
     expect(bare).toHaveTextContent("El pasaje.");
     expect(within(bare).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows how the tribunal decided files like a matched case, and nothing for an unmatched one", async () => {
+    answer(200, {
+      query: "me cobran el cargo fijo",
+      outcome: "found",
+      brands: [],
+      outcomes: { fundado: 2 },
+      cases: [
+        { ...CASE, statistics: STATISTICS },
+        { ...CASE, resolution_id: 9 },
+      ],
+    });
+
+    await searchFor("me cobran el cargo fijo");
+
+    const [matched, unmatched] = await screen.findAllByRole("article");
+    const inCard = within(matched!);
+    expect(
+      inCard.getByRole("heading", {
+        name: "Cómo decidió el tribunal casos como este",
+      }),
+    ).toBeInTheDocument();
+    expect(matched).toHaveTextContent(
+      "Desde 2017 el tribunal resolvió 198,403 apelaciones por facturación y cobro (cargo fijo): 16% fundadas, 17% fundadas en parte, 10% infundadas, 48% improcedentes y 9% terminó de otra forma.",
+    );
+    expect(matched).toHaveTextContent(
+      "Contra Claro, 1,000 apelaciones: 20% fundadas, 10% fundadas en parte, 30% infundadas, 40% improcedentes y menos de 1% terminó de otra forma.",
+    );
+    expect(matched).toHaveTextContent(
+      "Improcedentes: no resolvió el fondo del pedido",
+    );
+    expect(matched).toHaveTextContent("De otra forma:");
+    expect(matched).toHaveTextContent(
+      "Son resultados pasados, no una predicción para tu caso.",
+    );
+    expect(matched).toHaveTextContent("con datos al 24 de julio de 2026");
+    expect(inCard.getByRole("link", { name: "PUNKU" })).toHaveAttribute(
+      "href",
+      "https://punku.osiptel.gob.pe",
+    );
+    expect(matched).not.toHaveTextContent("—");
+    expect(unmatched).not.toHaveTextContent("Cómo decidió el tribunal");
   });
 
   it.each([
