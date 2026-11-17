@@ -78,11 +78,53 @@ The request takes `query` and the filters of [`POST /search`](retrieval.md):
           { "text": "...", "quote": "..." },
           { "text": "...", "quote": "..." }
         ]
+      },
+      "statistics": {
+        "file_type": "RA",
+        "source": "https://punku.osiptel.gob.pe/Archivos/Datasets-PUNKU-OSIPTEL.zip",
+        "cut_on": "2026-07-24",
+        "concepts": [
+          {
+            "concept": "facturación y cobro",
+            "detail": "cargo fijo",
+            "counts": {
+              "files": 183496,
+              "first_year": 2017,
+              "last_year": 2025,
+              "outcomes": {
+                "fundado": 30230,
+                "fundado_en_parte": 23502,
+                "infundado": 19068,
+                "improcedente": 95178,
+                "other": 15518
+              }
+            },
+            "brand": {
+              "brand": "Movistar",
+              "files": 96597,
+              "first_year": 2017,
+              "last_year": 2025,
+              "outcomes": {
+                "fundado": 15783,
+                "fundado_en_parte": 16332,
+                "infundado": 7494,
+                "improcedente": 52811,
+                "other": 4177
+              }
+            }
+          }
+        ]
       }
     }
   ]
 }
 ```
+
+`statistics` holds how the tribunal decided every file of the case's type and
+concepts, from OSIPTEL's open data. It is null when the case's file is not in
+that data. [Outcomes](outcomes.md) describes the source, the counts and the
+match. A concept's `brand` holds the same counts for the brand of the file's
+company, and is null when that brand has fewer than 100 files there.
 
 `brands` lists the brands the query names. `brand` is null for a legal name
 `brands.py` does not map. `url` is the resolution's gob.pe page and `pdf_url`

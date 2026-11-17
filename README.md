@@ -34,7 +34,9 @@ that search on judged questions; see [evaluation](docs/evaluation.md).
 `reclamos cards build` writes a case card per resolution offline, within a spend
 budget; see [cards](docs/cards.md). `POST /cases` returns the resolutions most
 like a visitor's problem with their cards, and calls no model; see
-[cases](docs/cases.md).
+[cases](docs/cases.md). `reclamos outcomes load` loads how the tribunal decided
+every file since 2017 from OSIPTEL's open data, and `POST /cases` attaches those
+counts to each case; see [outcomes](docs/outcomes.md).
 
 Run the quality gate with:
 

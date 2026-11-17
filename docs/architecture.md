@@ -8,6 +8,7 @@ browser -> apps/web -> apps/api -> PostgreSQL (pgvector)
                                                       \-> PDF store (disk or S3)
                                                       \-> embedding model (local)
 apps/api reclamos cards (offline) -> Anthropic or OpenRouter
+apps/api reclamos outcomes load -> OSIPTEL PUNKU zip -> PostgreSQL
 packages/eval -> retrieval metrics and the judged questions
 infra -> AWS ECS, RDS, S3, ECR, IAM
 ```
@@ -53,6 +54,13 @@ the search results by resolution and attaches each served card, and `api.py` is
 `POST /cases`. No route calls a model. [Cases](cases.md) describes the threshold
 and the response.
 
+`apps/api/src/reclamos_api/outcomes/` counts how the tribunal decided every file
+since 2017, from OSIPTEL's open data: `source.py` reads the workbooks,
+`labels.py` maps their labels to concepts, `repository.py` loads the tables and
+the counts, `commands.py` is `reclamos outcomes load`, and `serve.py` gives
+`POST /cases` the `statistics` of each case's file. [Outcomes](outcomes.md)
+describes the source and the match.
+
 `apps/web/src/App.tsx` is the Spanish search page. It sends the visitor's
 problem to `POST /cases` through `api.ts` and shows each case with
 `CaseCard.tsx`. `labels.ts` holds the Spanish names of claim types, outcomes and
@@ -60,6 +68,9 @@ card fields. Vite builds it as a static client. `apps/web/vercel.json` owns the
 Vercel change filter for this workspace. The page is built from GitButler's
 components in `packages/but-ui` and `packages/but-ui-react`; [Web](web.md)
 describes them.
+
+`apps/web/src/Statistics.tsx` writes a case's outcome statistics inside its
+card, as Spanish sentences.
 
 `packages/eval/src/reclamos_eval/retrieval.py` scores a ranking of resolutions
 (recall, MRR and nDCG), `questions.py` reads the judged question set,
