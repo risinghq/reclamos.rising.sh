@@ -23,7 +23,8 @@ docker compose up --build
 
 The API listens on port 8000 and the web app runs separately with
 `bun run --cwd apps/web dev` on port 5173. The health response reports
-`database.ok` and `queue.ok`; both must be true for a healthy stack.
+`database.ok`, `queue.ok` and the `commit` the image was built for; both `ok`
+fields must be true for a healthy stack.
 
 [`.env.example`](../.env.example) lists every environment variable the API, the
 worker and the tests read.
@@ -52,9 +53,9 @@ deployed worker keeps them in the S3 bucket.
 | `test`      | pytest without the `integration` marker, vitest                                                   |
 | `build`     | the `reclamos-api` and `reclamos-eval` distributions, the web bundle                              |
 
-The `check` job of the CI workflow runs `mise run check` on every pull request.
-Each area has its own tasks, such as `lint:py`, `typecheck:web` and `build:py`.
-`mise tasks` lists them.
+The `check` job of the CI workflow runs `mise run check` on every push to
+`master` and every pull request. Each area has its own tasks, such as `lint:py`,
+`typecheck:web` and `build:py`. `mise tasks` lists them.
 
 `mise run fix` applies the safe Ruff and oxlint fixes and formats Python,
 Terraform, Markdown, YAML, JSON, CSS, HTML and TypeScript.
@@ -105,7 +106,7 @@ terraform -chdir=infra init -backend-config=bucket="$BUCKET"
 ```
 
 The task definitions name an image tag, so the first apply creates the
-repository alone, then the image is pushed with the commit as its tag:
+repository alone, then an image is pushed with the commit as its tag:
 
 ```console
 terraform -chdir=infra apply -target=aws_ecr_repository.api
@@ -125,30 +126,85 @@ only: through Cloudflare's proxy, the load balancer would see Cloudflare's
 addresses, and the [rate limit](#rate-limit) would count every visitor as a few
 clients.
 
+### Pipeline
+
+Every push to `master` that passes the `check` job and, when it ran, the
+`integration` job runs the `deploy` job. A run whose commit is no longer the tip
+of `master` stops there: the run for the tip deploys everything up to it. The
+job deploys the API when `/health` reports a commit that is missing, is not an
+ancestor of the pushed one, or is separated from it by a change to a path the
+image is built from (`apps/api`, `packages/eval`, `pyproject.toml`, `uv.lock`);
+otherwise it skips build, push and roll. When it deploys, it builds
+`apps/api/Dockerfile`, pushes the image to ECR tagged with the commit SHA
+(skipping a tag that already exists), registers new revisions of the
+`reclamos-api` and `reclamos-worker` task definitions with that image and tag as
+`COMMIT_SHA`, updates both services, and waits until
+`https://api.reclamos.rising.sh/health` reports the commit. ECR keeps the last
+ten images; each carries the ~1.7 GB embedding model.
+
+The job assumes `aws_iam_role.github_deploy` through GitHub's OIDC provider,
+which trusts only this repository's `master` branch. One `terraform apply`
+creates the role and the provider. If apply reports that
+`token.actions.githubusercontent.com` already exists in the account, import it
+instead:
+
+```console
+terraform -chdir=infra import aws_iam_openid_connect_provider.github \
+  arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com
+```
+
+Then give the workflow the role's ARN as a repository variable:
+
+```console
+gh variable set AWS_DEPLOY_ROLE_ARN \
+  --body "$(terraform -chdir=infra output -raw github_deploy_role_arn)"
+```
+
+The services ignore `task_definition` on apply: the pipeline owns which revision
+each service runs, so a later `terraform apply` never rolls a service back to
+`api_image_tag`. The job re-registers the latest revision of each family, so
+changes to the containers in `infra/ecs.tf` reach the next deploy.
+
+To redeploy a commit without a push, run the workflow by hand:
+
+```console
+gh workflow run ci.yml --ref master
+```
+
+The run checks the commit again, then deploys the web app and — when the
+deployed commit is missing, is not an ancestor of it, or differs from it on an
+image path — the API too. To deploy outside the workflow, run the build, push
+and service-roll commands of the `deploy` job in `.github/workflows/ci.yml`
+under an AWS session with the same rights.
+
 ## Web deploy
 
-The web app is the Vercel project `web`, which deploys each push to `master`
-that touches `apps/web`. The Vercel CLI is not a mise tool: since 65.x its
-`@vercel/*` packages ship without npm provenance, which mise's trust policy
-rejects. To link or deploy by hand, run it through Bun:
+The web app is the Cloudflare Worker `reclamos-web` on the `rising` account.
+`apps/web/wrangler.jsonc` serves `apps/web/dist` as static assets on
+`reclamos.rising.sh`; the worker has no script. The `deploy` job deploys it on
+every run, after the API part succeeds or is skipped, because a static-assets
+deploy takes seconds and is idempotent. Deploy runs go one at a time, a deploy
+in progress is never cancelled, and a newer push replaces a queued deploy —
+harmless, because each run decides from the deployed commit, not the push diff.
+
+The job builds with `VITE_API_URL=https://api.reclamos.rising.sh` and runs
+`wrangler deploy`. The organization secrets `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` already reach the repository; the token needs Workers
+edit on the account.
+
+Wrangler is a dev dependency of `apps/web`, so a manual deploy needs no extra
+install:
 
 ```console
 cd apps/web
-bun x vercel link
-bun x vercel deploy --prod
+bun run build
+bun x wrangler deploy
 ```
 
-The linked project metadata is local and ignored by Git.
-
-The page calls the API from the visitor's browser. Set `VITE_API_URL` in the
-Vercel project to the API's address, such as `https://api.reclamos.example`.
-Vite reads it at build time, and the default is `http://localhost:8000`.
-`apps/web/vercel.json` skips a build when the push leaves `apps/web` and
-`bun.lock` unchanged, so a changed variable reaches the site only through a
-redeploy from the dashboard with "Use project's Ignore Build Step" cleared. The
-API answers a browser only from an origin in `WEB_ORIGINS`, so set the Terraform
-variable `web_origins` to the web app's addresses. The browser calls the API
-directly, with no rewrite through Vercel, so the API sees each visitor's
+The page calls the API from the visitor's browser, so `VITE_API_URL` must be set
+at build time (the default is `http://localhost:8000`), and the API answers a
+browser only from an origin in `WEB_ORIGINS`, the Terraform `web_origins`
+variable. There is no rewrite through the Worker, so the API sees each visitor's
 address.
 
 ## Rate limit

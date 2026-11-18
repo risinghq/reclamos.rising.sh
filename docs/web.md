@@ -1,7 +1,8 @@
 # Web
 
 `apps/web` is the Spanish search page at <https://reclamos.rising.sh>. It is a
-React client that Vite builds as static files. Vercel serves it.
+React client that Vite builds as static files. A Cloudflare Worker serves the
+`dist` bundle as assets; `wrangler.jsonc` holds its configuration.
 
 ## Components
 

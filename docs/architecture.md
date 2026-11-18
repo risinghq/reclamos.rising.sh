@@ -14,7 +14,8 @@ infra -> AWS ECS, RDS, S3, ECR, IAM
 ```
 
 `apps/api/src/reclamos_api/main.py` creates the FastAPI application and owns the
-`/health` route. `ratelimit.py` limits how often one client may search; see
+`/health` route, which reports the commit the deployed image was built for.
+`ratelimit.py` limits how often one client may search; see
 [operations](operations.md#rate-limit). `db.py` owns the asyncpg startup
 boundary, and `health.py` checks PostgreSQL and the rqueue jobs table
 separately.
@@ -70,10 +71,9 @@ consolidation.
 `apps/web/src/App.tsx` is the Spanish search page. It sends the visitor's
 problem to `POST /cases` through `api.ts` and shows each case with
 `CaseCard.tsx`. `labels.ts` holds the Spanish names of claim types, outcomes and
-card fields. Vite builds it as a static client. `apps/web/vercel.json` owns the
-Vercel change filter for this workspace. The page is built from GitButler's
-components in `packages/but-ui` and `packages/but-ui-react`; [Web](web.md)
-describes them.
+card fields. Vite builds it as a static client, and a Cloudflare Worker serves
+the bundle as assets. The page is built from GitButler's components in
+`packages/but-ui` and `packages/but-ui-react`; [Web](web.md) describes them.
 
 `apps/web/src/Statistics.tsx` writes a case's outcome statistics inside its
 card, as Spanish sentences.
@@ -89,9 +89,11 @@ index. [Evaluation](evaluation.md) describes the commands.
 
 `infra/` defines the AWS deployment: an HTTPS application load balancer, ECS
 Fargate task definitions and services for the API and worker, PostgreSQL RDS, an
-S3 PDF bucket, ECR, the IAM roles those services need, and the API's DNS records
-on Cloudflare. Terraform uses an S3 backend with native S3 locking; applying it
-is an operator action.
+S3 PDF bucket, ECR, the IAM roles those services need, the OIDC role the deploy
+job assumes, and the API's DNS records on Cloudflare. Terraform uses an S3
+backend with native S3 locking; applying it is an operator action. The CI
+workflow deploys the API and the web app on `master`;
+[operations](operations.md) describes the pipeline.
 
 ## Corpus state
 
