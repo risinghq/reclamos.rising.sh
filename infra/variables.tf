@@ -43,9 +43,15 @@ variable "cloudflare_zone_name" {
   description = "Cloudflare zone containing api_domain_name."
 }
 
+variable "github_repository" {
+  type        = string
+  description = "GitHub repository, as owner/name, whose master branch may assume the deploy role."
+  default     = "risinghq/reclamos.rising.sh"
+}
+
 variable "api_image_tag" {
   type        = string
-  description = "Immutable ECR tag deployed to the API and worker tasks."
+  description = "Immutable ECR tag the task definitions start from. The pipeline registers later revisions."
   default     = "bootstrap"
 
   validation {

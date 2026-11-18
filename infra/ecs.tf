@@ -42,6 +42,7 @@ resource "aws_ecs_task_definition" "api" {
         # Only the load balancer reaches the task, so uvicorn takes each
         # visitor's address from the X-Forwarded-For it appends.
         { name = "FORWARDED_ALLOW_IPS", value = aws_vpc.main.cidr_block },
+        { name = "COMMIT_SHA", value = var.api_image_tag },
       ]
       secrets = [{ name = "DB_PASSWORD", valueFrom = "${local.db_secret}:password::" }]
       logConfiguration = {
@@ -77,6 +78,7 @@ resource "aws_ecs_task_definition" "worker" {
         { name = "DB_USER", value = var.db_username },
         { name = "PDF_STORE", value = "s3" },
         { name = "PDF_BUCKET", value = aws_s3_bucket.pdfs.bucket },
+        { name = "COMMIT_SHA", value = var.api_image_tag },
       ]
       secrets = [{ name = "DB_PASSWORD", valueFrom = "${local.db_secret}:password::" }]
       logConfiguration = {
@@ -105,6 +107,12 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.api]
+
+  # The deploy pipeline moves the service to each new image; an apply must not
+  # roll it back to api_image_tag.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
@@ -158,6 +166,12 @@ resource "aws_ecs_service" "worker" {
   task_definition = aws_ecs_task_definition.worker.arn
   desired_count   = var.worker_count
   launch_type     = "FARGATE"
+
+  # The deploy pipeline moves the service to each new image; an apply must not
+  # roll it back to api_image_tag.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
