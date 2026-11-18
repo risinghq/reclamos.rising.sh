@@ -47,6 +47,9 @@ data "aws_iam_policy_document" "github_deploy" {
   statement {
     actions = [
       "ecr:BatchCheckLayerAvailability",
+      # docker push sends a HEAD for the manifest, which ECR authorizes as
+      # BatchGetImage.
+      "ecr:BatchGetImage",
       "ecr:CompleteLayerUpload",
       "ecr:DescribeImages",
       "ecr:InitiateLayerUpload",
