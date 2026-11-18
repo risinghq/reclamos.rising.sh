@@ -38,6 +38,7 @@ class Settings:
     rules_min_text_rank: float = DEFAULT_RULES_MIN_TEXT_RANK
     web_origins: tuple[str, ...] = DEFAULT_WEB_ORIGINS
     searches_per_minute: int = DEFAULT_SEARCHES_PER_MINUTE
+    commit: str | None = None
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -67,6 +68,7 @@ class Settings:
             searches_per_minute=int(
                 os.environ.get("SEARCHES_PER_MINUTE", DEFAULT_SEARCHES_PER_MINUTE)
             ),
+            commit=os.environ.get("COMMIT_SHA") or None,
         )
 
 

@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     ) as pool:
         app.state.pool = pool
         app.state.queue_schema = settings.queue_schema
+        app.state.commit = settings.commit
         app.state.embedder = app.state.embedder or embedder_from_settings(settings)
         app.state.min_similarity = settings.refusal_min_similarity
         app.state.rules_min_similarity = settings.rules_min_similarity
@@ -55,7 +56,10 @@ def create_app(embedder: Embedder | None = None) -> FastAPI:
             request.app.state.pool, queue_schema=request.app.state.queue_schema
         )
         status_code = 200 if payload["status"] == "ok" else 503
-        return JSONResponse(status_code=status_code, content=payload)
+        return JSONResponse(
+            status_code=status_code,
+            content={**payload, "commit": request.app.state.commit},
+        )
 
     return app
 
