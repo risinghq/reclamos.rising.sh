@@ -43,10 +43,13 @@ variable "cloudflare_zone_name" {
   description = "Cloudflare zone containing api_domain_name."
 }
 
-variable "github_repository" {
+# The repository issues immutable OIDC subjects, which carry the owner and
+# repository ids. `gh api repos/OWNER/REPO/actions/oidc/customization/sub`
+# prints the prefix as sub_claim_prefix.
+variable "github_subject_prefix" {
   type        = string
-  description = "GitHub repository, as owner/name, whose master branch may assume the deploy role."
-  default     = "risinghq/reclamos.rising.sh"
+  description = "OIDC subject prefix of the GitHub repository whose master branch may assume the deploy role."
+  default     = "repo:risinghq@208422269/reclamos.rising.sh@1421764175"
 }
 
 variable "api_image_tag" {
