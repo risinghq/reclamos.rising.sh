@@ -1,0 +1,7 @@
+{
+  "name": "reclamos-web",
+  "workers_dev": false,
+  "compatibility_date": "2026-01-01",
+  "routes": [{ "pattern": "reclamos.rising.sh", "custom_domain": true }],
+  "assets": { "directory": "./dist" },
+}
