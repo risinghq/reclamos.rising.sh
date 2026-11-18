@@ -207,7 +207,8 @@ def _note_origin(note: re.Match[str], source: RuleSource) -> TextOrigin:
         raise ConsolidationError(
             f"a SPIJ note has an invalid publication date: {published}"
         )
-    norm = re.sub(r"-\s*\n\s*", "-", note["norm"]).strip()
+    # OCR spaces the separators of a resolution number ("00224 -2023-CD/ OSIPTEL").
+    norm = re.sub(r"\s*([-/])\s*", r"\1", note["norm"]).strip()
     return TextOrigin(
         f"Res. {norm}",
         date(

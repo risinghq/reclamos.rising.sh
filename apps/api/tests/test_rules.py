@@ -78,7 +78,7 @@ Artículo 8.- Texto anterior.
 CD/OSIPTEL, publicada el 15 julio 2026, cuyo texto es el siguiente:
 \"Artículo 8.- Texto vigente de condiciones.
 Artículo 10.- Texto anterior de reglamento.
-(*) Artículo modificado por el Artículo Quinto de la Resolución Nº 172-2022-CD/OSIPTEL ,
+(*) Artículo modificado por el Artículo Quinto de la Resolución Nº 172 -2022-CD/ OSIPTEL ,
 publicada el 08 octubre 2022, cuyo texto es el siguiente:
 \"Artículo 10.- Texto vigente de reglamento.
 Artículo 9.- Texto siguiente.""",
