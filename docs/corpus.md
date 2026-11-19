@@ -45,9 +45,18 @@ Each step is an `rqueue` job, and each job queues the next:
    `resolutions/<id>.pdf` with its SHA-256 and size.
 3. `corpus.extract` reads the text layer of each page and runs OCR on pages that
    have none. Resolutions published as scans are the common case.
-4. `corpus.chunk` splits the text into passages and `corpus.embed` stores a
-   vector for each. [Retrieval](retrieval.md) describes both.
-5. `corpus.parse` reads the number, date, operator, claim type and outcome from
+4. `corpus.redact` replaces what identifies a person in `body` — names, document
+   numbers, lines, emails, home addresses and account codes — with fixed labels
+   (`[NOMBRE]`, `[DNI]`, `[TELÉFONO]`, `[CORREO]`, `[DIRECCIÓN]`, `[CÓDIGO]`)
+   and stores the result in `redacted_body`. Names that are public record stay:
+   the vocales and secretaries who sign, OSIPTEL officials in their role, the
+   operators' names and institutional addresses. `body` keeps the extracted
+   text; every reader after this step, passages included, sees the redacted
+   text. `redactor_version` in `corpus/redact.py` marks which redactor wrote the
+   text; a version that differs from the stored one makes the step run again.
+5. `corpus.chunk` splits the redacted text into passages and `corpus.embed`
+   stores a vector for each. [Retrieval](retrieval.md) describes both.
+6. `corpus.parse` reads the number, date, operator, claim type and outcome from
    the text and the page summary. It runs last because it only fills the fields
    that filter a search: a resolution whose header the scan damaged is still
    searchable.
@@ -102,9 +111,32 @@ uv run reclamos corpus stats
 `crawl` lists every publication date from 2003-01-01 (`--since`) to today
 (`--until`), runs the jobs in this process until the queue is empty, then prints
 the same statistics as `stats`. `stats` prints the resolutions found,
-downloaded, extracted, parsed, chunked and embedded, the failures by stage and
-reason, and the counts of claim types and outcomes. `reclamos corpus reindex`
-rebuilds the search index; see [Retrieval](retrieval.md#re-indexing).
+downloaded, extracted, redacted (with the count of each label it placed),
+parsed, chunked and embedded, the failures by stage and reason, and the counts
+of claim types and outcomes. `reclamos corpus reindex` rebuilds the search
+index; see [Retrieval](retrieval.md#re-indexing).
+
+## Dataset export
+
+`reclamos dataset export DIR` writes the corpus as JSONL files for publication.
+Every text field is the redacted text at the current redactor version. It writes
+no PDFs, no embeddings and no cards. The command refuses to write when a
+resolution that has a body, or a rule document, has no redacted text at the
+current version; run `reclamos corpus crawl` and `reclamos rules sync` first.
+
+- `resolutions.jsonl`: one row per resolution — `id`, `page_url`, `expediente`,
+  `published_on`, `summary`, `pdf_url`, `pdf_sha256`, `pdf_bytes`, `page_count`,
+  `ocr_pages`, `text_method`, the parsed fields (`number`, `resolved_on`,
+  `operator`, `subject`, `claim_type`, `appeal_kind`, `outcome`, `is_precedent`)
+  and `text`, the redacted body.
+- `passages.jsonl`: one row per chunk — `resolution_id`, `ordinal`, `section`,
+  `page_start`, `page_end`, `char_start`, `char_end` (offsets into the redacted
+  text) and `text`.
+- `rule_documents.jsonl`: one row per rule document — `slug`, `title`, `kind`,
+  `approved_by`, `text_date`, `pdf_url`, `pdf_sha256`, `visitor_searchable` and
+  `text`, the redacted body.
+- `rule_passages.jsonl`: one row per rule passage — `document_slug`, `ordinal`,
+  `label`, `text_source`, `text_date`, `pdf_url` and `text`.
 
 ## Configuration
 

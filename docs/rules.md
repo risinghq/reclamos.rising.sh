@@ -11,6 +11,11 @@ extracts their text, consolidates the current text, and embeds the passages with
 the configured local embedding model. It makes no language-model call. A second
 run leaves an unchanged document's passages and vectors in place.
 
+The consolidated text goes through the corpus [redactor](corpus.md#redaction)
+before it is stored: precedents are resolutions about real complainants, so the
+stored body and every passage carry the same privacy labels as corpus text. The
+build hash covers the redactor version, so a new redactor rebuilds the index.
+
 ## Sources
 
 `apps/api/src/reclamos_api/rules/sources.py` owns every source's slug, title,

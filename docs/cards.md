@@ -64,6 +64,12 @@ and the body. `PROMPT_VERSION` hashes the system prompt and the schema, so a
 prompt change makes every card stale. A re-parsed body makes its own card stale.
 Writing a card again clears its verdict.
 
+The card reads the extracted body, but what it stores is redacted: the
+[redactor](corpus.md#pipeline) runs over the checked fields, readings and
+rejected quotes before the row is written, and `reclamos cards redact` applies
+it to stored cards. `body_sha256` still hashes `body`, so redaction does not
+regenerate a card.
+
 ## Judge
 
 `reclamos cards judge` sends each current card without a current verdict to the

@@ -6,10 +6,11 @@ code is in `apps/api/src/reclamos_api/retrieval/` and
 
 ## Chunk model
 
-A resolution's stored text (`resolutions.body`, pages joined by form feeds) is
-split into passages by `chunk_text` in `chunk.py`. A resolution is a header
-block, then sections introduced by a heading, each made of paragraphs, most of
-them numbered. The splitter follows that structure:
+A resolution's stored text (`resolutions.redacted_body`, pages joined by form
+feeds and redacted as [Corpus](corpus.md) describes) is split into passages by
+`chunk_text` in `chunk.py`. A resolution is a header block, then sections
+introduced by a heading, each made of paragraphs, most of them numbered. The
+splitter follows that structure:
 
 - A heading (`VISTO`, `ANTECEDENTES`, `ANÁLISIS DEL CASO`, `FUNDAMENTOS`,
   `HA RESUELTO`, ...) starts a section, and a chunk never crosses one. Scans
@@ -27,19 +28,19 @@ them numbered. The splitter follows that structure:
 
 Each row of `chunks` in `schema.sql` holds:
 
-| Column                     | Meaning                                                 |
-| -------------------------- | ------------------------------------------------------- |
-| `id`                       | Primary key; new chunks of a resolution get new ids     |
-| `resolution_id`, `ordinal` | Unique; ordinals count from 0 in text order             |
-| `section`                  | `encabezado`, `visto`, `antecedentes`, `analisis`, ...  |
-| `page_start`, `page_end`   | 1-based pages the chunk touches                         |
-| `char_start`, `char_end`   | Offsets into `resolutions.body`; `body[start:end]=text` |
-| `text`                     | The passage                                             |
-| `search`                   | Generated `tsvector` of `text`                          |
-| `embedding`                | `vector(1024)`, null until the resolution is embedded   |
+| Column                     | Meaning                                                                   |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `id`                       | Primary key; new chunks of a resolution get new ids                       |
+| `resolution_id`, `ordinal` | Unique; ordinals count from 0 in text order                               |
+| `section`                  | `encabezado`, `visto`, `antecedentes`, `analisis`, ...                    |
+| `page_start`, `page_end`   | 1-based pages the chunk touches                                           |
+| `char_start`, `char_end`   | Offsets into `resolutions.redacted_body`; `redacted_body[start:end]=text` |
+| `text`                     | The passage                                                               |
+| `search`                   | Generated `tsvector` of `text`                                            |
+| `embedding`                | `vector(1024)`, null until the resolution is embedded                     |
 
 A caller quotes a passage by reading `char_start` and `char_end` from the stored
-body, and checks it against `text`.
+redacted body, and checks it against `text`.
 
 ## Indexes
 

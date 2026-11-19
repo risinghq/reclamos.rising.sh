@@ -28,10 +28,11 @@ with an error if the schema is still unavailable.
 
 `apps/api/src/reclamos_api/corpus/` builds the resolution corpus: `site.py`
 crawls gob.pe, `store.py` holds PDFs behind one interface, `extract.py` reads
-text and runs OCR, `chunk.py` splits the text into passages, `parse.py` reads
-each resolution, `jobs.py` runs those steps as rqueue jobs, and `stats.py`
-summarizes the result. `cli.py` exposes it as the `reclamos` command.
-[Corpus](corpus.md) describes the pipeline.
+text and runs OCR, `redact.py` replaces identifying data in the text with fixed
+labels, `chunk.py` splits the redacted text into passages, `parse.py` reads each
+resolution, `jobs.py` runs those steps as rqueue jobs, and `stats.py` summarizes
+the result. `cli.py` exposes it as the `reclamos` command. [Corpus](corpus.md)
+describes the pipeline.
 
 `apps/api/src/reclamos_api/retrieval/` searches the chunks: `embedder.py` runs
 the embedding model, `search.py` ranks and fuses, and `api.py` is the
@@ -123,21 +124,24 @@ written by either. Jobs are queued by two kinds of actor:
 A resolution has one state, the last stage it finished, and may also carry a
 failure. The columns that define each state are in `schema.sql`.
 
-| State      | Holds when                                     | Entered from                | Actor that makes the transition                            |
-| ---------- | ---------------------------------------------- | --------------------------- | ---------------------------------------------------------- |
-| discovered | the row exists and `downloaded_at` is null     | nothing: `discover` inserts | `corpus.discover`, run by the worker or the CLI            |
-| downloaded | `downloaded_at` is set and `extracted_at` null | discovered                  | `corpus.download`, run by the worker or the CLI            |
-| extracted  | `extracted_at` is set and `chunked_at` is null | downloaded                  | `corpus.extract`, run by the worker or the CLI             |
-| chunked    | `chunked_at` is set and `embedded_at` is null  | extracted                   | `corpus.chunk`, run by the worker or the CLI               |
-| embedded   | `embedded_at` is set and `parsed_at` is null   | chunked                     | `corpus.embed`, run by the worker or the CLI               |
-| parsed     | `parsed_at` is set                             | embedded                    | `corpus.parse`, run by the worker or the CLI               |
-| failed     | `failure_stage` is set                         | any state but parsed        | the job of the failing stage, run by the worker or the CLI |
+| State      | Holds when                                                                      | Entered from                | Actor that makes the transition                            |
+| ---------- | ------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------- |
+| discovered | the row exists and `downloaded_at` is null                                      | nothing: `discover` inserts | `corpus.discover`, run by the worker or the CLI            |
+| downloaded | `downloaded_at` is set and `extracted_at` null                                  | discovered                  | `corpus.download`, run by the worker or the CLI            |
+| extracted  | `extracted_at` is set and `redacted_at` is null                                 | downloaded                  | `corpus.extract`, run by the worker or the CLI             |
+| redacted   | `redacted_at` is set at the current `redactor_version` and `chunked_at` is null | extracted                   | `corpus.redact`, run by the worker or the CLI              |
+| chunked    | `chunked_at` is set and `embedded_at` is null                                   | redacted                    | `corpus.chunk`, run by the worker or the CLI               |
+| embedded   | `embedded_at` is set and `parsed_at` is null                                    | chunked                     | `corpus.embed`, run by the worker or the CLI               |
+| parsed     | `parsed_at` is set                                                              | embedded                    | `corpus.parse`, run by the worker or the CLI               |
+| failed     | `failure_stage` is set                                                          | any state but parsed        | the job of the failing stage, run by the worker or the CLI |
 
 Rules for these transitions:
 
 - A resolution moves forward. A stage that finishes sets its timestamp. Two
-  writers clear one. `corpus.chunk` clears `embedded_at` when it replaces the
-  chunks of a resolution, because their vectors go with them.
+  writers clear one. `corpus.redact` clears `chunked_at` and `embedded_at` and
+  deletes the chunks when it rewrites the redacted text, because they were built
+  from the previous text. `corpus.chunk` clears `embedded_at` when it replaces
+  the chunks of a resolution, because their vectors go with them.
   `reclamos corpus reindex` clears more: `chunks` clears `chunked_at` and
   `embedded_at` and deletes the chunks, `embeddings` clears `embedded_at` and
   the vectors.
