@@ -26,10 +26,11 @@ PostgreSQL leases and at-least-once delivery model. Before registering, it polls
 for the API-owned queue schema once per second for up to 30 attempts, then exits
 with an error if the schema is still unavailable.
 
-`apps/api/src/reclamos_api/corpus/` builds the resolution corpus: `site.py`
-crawls gob.pe, `store.py` holds PDFs behind one interface, `extract.py` reads
-text and runs OCR, `redact.py` replaces identifying data in the text with fixed
-labels, `chunk.py` splits the redacted text into passages, `parse.py` reads each
+`apps/api/src/reclamos_api/corpus/` builds the resolution corpus: `sources.py`
+declares each gob.pe collection with its sector, `site.py` crawls gob.pe,
+`store.py` holds PDFs behind one interface, `extract.py` reads text and runs
+OCR, `redact.py` replaces identifying data in the text with fixed labels,
+`chunk.py` splits the redacted text into passages, `parse.py` reads each
 resolution, `jobs.py` runs those steps as rqueue jobs, and `stats.py` summarizes
 the result. `cli.py` exposes it as the `reclamos` command. [Corpus](corpus.md)
 describes the pipeline.
@@ -63,10 +64,10 @@ the counts, `commands.py` is `reclamos outcomes load`, and `serve.py` gives
 `POST /cases` the `statistics` of each case's file. [Outcomes](outcomes.md)
 describes the source and the match.
 
-`apps/api/src/reclamos_api/rules/` indexes fixed OSIPTEL legal sources apart
-from resolutions. `sources.py` owns the legal source inventory, `sync.py`
-downloads, extracts, consolidates and embeds it, and `find.py` returns the best
-current passages for `POST /cases`. [Rules](rules.md) describes the sources and
+`apps/api/src/reclamos_api/rules/` indexes fixed legal sources apart from
+resolutions. `sources.py` owns the legal source inventory, `sync.py` downloads,
+extracts, consolidates and embeds it, and `find.py` returns the best current
+passages for `POST /cases`. [Rules](rules.md) describes the sources and
 consolidation.
 
 `apps/web/src/App.tsx` is the Spanish search page. It sends the visitor's

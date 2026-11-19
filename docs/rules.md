@@ -19,13 +19,26 @@ build hash covers the redactor version, so a new redactor rebuilds the index.
 ## Sources
 
 `apps/api/src/reclamos_api/rules/sources.py` owns every source's slug, title,
-kind, approval, text date, PDF URL, and amendments. The indexed material is:
+kind, sector, approval, text date, PDF URL, and amendments. Each rule document
+carries the sector of the norms it serves: `telecom` sources are OSIPTEL rules
+and `energy` sources are Osinergmin rules. A rule search with a sector filter
+only returns passages of that sector. The indexed material is:
+
+Telecom:
 
 - the 2021 TRASU lineamientos for appeals and complaints;
 - the TUO del Reglamento de Reclamos, Res. 099-2022-CD/OSIPTEL;
 - the Norma de las Condiciones de Uso, Res. 132-2025-CD/OSIPTEL;
 - the six TRASU precedentes de observancia obligatoria;
 - the Tribunal de Apelaciones precedents in Res. 072-2025-TA/OSIPTEL.
+
+Energy:
+
+- the Procedimiento Administrativo de Reclamos de los Usuarios de los Servicios
+  Públicos de Electricidad y Gas Natural, Res. 269-2014-OS/CD;
+- its amendment, Res. 014-2025-OS/CD;
+- the JARU lineamientos resolutivos, parts I and II;
+- the JARU compendium of precedentes de observancia obligatoria.
 
 The Reglamento source is the SPIJ consolidated edition dated 2026-08-04. Its
 article notes already apply the earlier amendments. Res. 000129-2026-CD is the

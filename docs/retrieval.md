@@ -52,7 +52,7 @@ redacted body, and checks it against `text`.
   (`vector_cosine_ops`). A filtered query sets `hnsw.iterative_scan` to
   `strict_order`, so a filter that removes most of the index still returns the
   candidates it should.
-- `resolutions_filter_idx` covers `(claim_type, outcome, resolved_on)`.
+- `resolutions_filter_idx` covers `(sector, claim_type, outcome, resolved_on)`.
 
 ## Embedding model
 
@@ -82,6 +82,7 @@ changed, an entry in `embedder.py` for its markers, and a new database, because
 | `query`                 | Required, 1 to 500 characters after trimming                                      |
 | `k`                     | 1 to 50, default 10                                                               |
 | `mode`                  | `hybrid` (default), `vector` or `text`                                            |
+| `sector`                | `telecom` or `energy`; unset searches both sectors                                |
 | `claim_type`, `outcome` | One of the values listed under [What parsing reads](corpus.md#what-parsing-reads) |
 | `operator`              | Exact operator name as stored                                                     |
 | `date_from`, `date_to`  | ISO dates, inclusive, on the resolution date; `from` not after `to`               |
@@ -93,11 +94,11 @@ answers 422. A filter on a parsed field leaves out the resolutions whose parsing
 failed, because their field is null.
 
 The response is `{query, mode, results}`. Each result carries the resolution
-(`resolution_id`, `expediente`, `number`, `date`, `operator`, `claim_type`,
-`outcome`, `url`) and the passage (`ordinal`, `section`, `page_start`,
-`page_end`, `char_start`, `char_end`, `text`), and three scores: `score`, the
-fused score that orders the list, and `vector_score` and `text_score`, which are
-null for a ranker that did not return the chunk.
+(`resolution_id`, `expediente`, `sector`, `number`, `date`, `operator`,
+`claim_type`, `outcome`, `url`) and the passage (`ordinal`, `section`,
+`page_start`, `page_end`, `char_start`, `char_end`, `text`), and three scores:
+`score`, the fused score that orders the list, and `vector_score` and
+`text_score`, which are null for a ranker that did not return the chunk.
 
 ## Fusion
 

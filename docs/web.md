@@ -33,6 +33,19 @@ components. The page follows them: one `pop` button per surface, outcome badges
 coloured by meaning, a `Banner` for a failed search and an `EmptyState` when no
 case is close enough.
 
+## Sectors
+
+The corpus covers telecom (OSIPTEL) and energy (Osinergmin) resolutions. Each
+case card shows its sector next to the operator and date. The visitor never
+picks a sector: [`POST /cases`](cases.md) infers it from the question, because a
+question like "me cobraron de más en el recibo de luz" already says which sector
+it is about, and a sector picker would only let a visitor mislabel their own
+problem. When the question points to neither sector, the API searches both.
+
+The outcome statistics PUNKU publishes cover OSIPTEL files only; no equivalent
+Osinergmin dataset exists. An energy search therefore says under the results
+that the outcome statistics only cover telecom cases.
+
 Import a component by its file, with the extension:
 
 ```ts

@@ -45,13 +45,24 @@ left. A case without a served card still shows its best passage.
 ## Route
 
 The request takes `query` and the filters of [`POST /search`](retrieval.md):
-`claim_type`, `operator`, `outcome`, `date_from` and `date_to`. `limit` is 1 to
-10 and defaults to 5. Any other field answers 422.
+`claim_type`, `operator`, `outcome`, `date_from` and `date_to`, plus an optional
+explicit `sector` (`telecom` or `energy`). `limit` is 1 to 10 and defaults to 5.
+Any other field answers 422.
+
+When the request gives no sector, `cases/sectors.py` infers one from the query:
+a question that mentions energy (`luz`, `electricidad`, `gas`, `kW`, an energy
+operator) searches only energy cases, and a question about telecom searches only
+telecom cases. A question that points to neither searches both sectors. The
+inference keeps an electricity question away from telecom cases and vice versa
+without asking the visitor to pick a sector. The response echoes the sector
+applied, or null when the query gave none, and each case carries its own
+`sector`.
 
 ```json
 {
   "query": "Me cobran un servicio que no contraté",
   "outcome": "found",
+  "sector": "telecom",
   "brands": ["Movistar"],
   "outcomes": { "fundado": 3, "infundado": 2 },
   "rules": [

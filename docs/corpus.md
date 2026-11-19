@@ -1,10 +1,17 @@
 # Corpus
 
-The corpus is the set of OSIPTEL TRASU resolutions (the Tribunal Administrativo
-de Solución de Reclamos de Usuarios) that answers are drawn from. The code is in
+The corpus is the set of user-complaint resolutions that answers are drawn from.
+Each resolution has a sector: `telecom` for OSIPTEL TRASU resolutions (the
+Tribunal Administrativo de Solución de Reclamos de Usuarios) and `energy` for
+Osinergmin JARU resolutions (the Junta de Apelaciones de Reclamos de Usuarios,
+which resolves electricity and natural-gas complaints). The code is in
 `apps/api/src/reclamos_api/corpus/` and the command line is `reclamos`.
 
-## Source
+## Sources
+
+Each source is declared in `corpus/sources.py` with its slug, sector, regulator,
+tribunal, collection URL, the function that reads the listing title, and the
+filter that decides which entries the corpus keeps.
 
 OSIPTEL publishes the resolutions in the "Jurisprudencia" collection on gob.pe:
 <https://www.gob.pe/institucion/osiptel/colecciones/52616-jurisprudencia>. Each
@@ -14,13 +21,24 @@ PDF on `cdn.www.gob.pe`. Some older titles repeat the label, as in
 `Expediente N.° Expediente 005687-2009/...`. The crawler stores the bare number,
 `NNNNNNN-YYYY/TRASU/ST-RA`, in `resolutions.expediente`.
 
+Osinergmin publishes JARU resolutions mixed with other tribunals in
+<https://www.gob.pe/institucion/osinergmin/colecciones/837>. JARU titles carry
+`OS/JARU-` in their number (`...-OS/JARU-S2` for a Sala Unipersonal, for
+example). Entries of the Cuerpos Colegiados (`OS/CC-`) and the Tribunal de
+Solución de Controversias (`OS/TSC-`) decide disputes between companies, not
+user complaints, so they are recorded with `skipped_reason` set to
+`cuerpo_colegiado` or `tribunal_controversias`. Any other entry without a JARU
+number is recorded as `not_jaru`. Skipped rows stay in the table for the
+statistics and never move to `corpus.download`.
+
 The crawler follows the robots rules of each host. gob.pe disallows `?sheet=`
 pagination, so the crawler never pages. It asks the collection for one
 publication-date window at a time with `filter[start_date]`, `filter[end_date]`
 and `filter[per_page]=100`. When a window reports more entries than it shows, it
 is split in two until it fits. A single day with more entries than one page
 cannot be split further, so it is recorded in `listing_failures` with the reason
-`listing_truncated`, and `corpus stats` lists it.
+`listing_truncated` under the collection's source slug, and `corpus stats` lists
+it.
 
 Requests are one per second per process, and each says who asks:
 
@@ -40,7 +58,9 @@ not a plain number is ignored.
 
 Each step is an `rqueue` job, and each job queues the next:
 
-1. `corpus.discover` lists a window and records each entry.
+1. `corpus.discover` lists a window for each declared source and records each
+   entry. Entries the source filters out get `skipped_reason` and no later stage
+   runs on them.
 2. `corpus.download` reads the resolution page, then stores the PDF under
    `resolutions/<id>.pdf` with its SHA-256 and size.
 3. `corpus.extract` reads the text layer of each page and runs OCR on pages that
@@ -77,15 +97,23 @@ each, and who clears a failure.
 
 ### What parsing reads
 
-| Field        | Values                                                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `number`     | `NNNNNNN-YYYY-TRASU/OSIPTEL`                                                                                                                                                    |
-| `operator`   | One of the known operators in `parse.py`, else the name as printed                                                                                                              |
-| `claim_type` | `unrequested_contract`, `porting`, `service_cut`, `service_quality`, `billing`, `equipment`, `contract_terms`, `procedural` (complaints, and resolutions that only void a step) |
-| `outcome`    | `fundado`, `infundado`, `improcedente`, `fundado_en_parte`, `mixto`, `sin_efecto`                                                                                               |
+| Field        | Values                                                                                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sector`     | `telecom` (OSIPTEL), `energy` (Osinergmin)                                                                                                                                                                                                                    |
+| `number`     | Telecom: `NNNNNNN-YYYY-TRASU/OSIPTEL`. Energy: `NNNNN-YYYY-OS/JARU-Sn`                                                                                                                                                                                        |
+| `operator`   | One of the known operators in `parse.py`, else the name as printed                                                                                                                                                                                            |
+| `claim_type` | Telecom: `unrequested_contract`, `porting`, `service_cut`, `service_quality`, `billing`, `equipment`, `contract_terms`, `procedural`. Energy: `meter`, `recupero`, `connection`, `service_cut`, `service_quality`, `billing`, `consumption`, `contract_terms` |
+| `outcome`    | `fundado`, `infundado`, `improcedente`, `fundado_en_parte`, `mixto`, `sin_efecto`                                                                                                                                                                             |
 
 Telefónica del Perú S.A.A. was renamed Integratel Perú S.A.A. in 2025. They are
-kept as separate operators because the resolutions print each name.
+kept as separate operators because the resolutions print each name. Enel
+Distribución Perú S.A.A. became Pluz Energía Perú S.A.A. for the same reason.
+
+Energy parsing reads a JARU header, whose layout differs from TRASU: the
+resolution number follows `OS/JARU-`, the operator sits on an
+`Empresa distribuidora:` (or `Empresa:`) line, and the claim sits on `Materia:`.
+A JARU resolution often rules claim by claim in its resolutive section, so
+`mixto` is common; a `NULO`/`NULA`/`NULIDAD` verdict maps to `sin_efecto`.
 
 The scan can damage any label, so two fields have a second source. The
 `Empresa:` line on the resolution page, when present, names the operator. The
@@ -110,11 +138,12 @@ uv run reclamos corpus stats
 
 `crawl` lists every publication date from 2003-01-01 (`--since`) to today
 (`--until`), runs the jobs in this process until the queue is empty, then prints
-the same statistics as `stats`. `stats` prints the resolutions found,
-downloaded, extracted, redacted (with the count of each label it placed),
-parsed, chunked and embedded, the failures by stage and reason, and the counts
-of claim types and outcomes. `reclamos corpus reindex` rebuilds the search
-index; see [Retrieval](retrieval.md#re-indexing).
+the same statistics as `stats`. `stats` prints, per sector, the resolutions
+found, the entries skipped by reason, the resolutions downloaded, extracted,
+redacted (with the count of each label it placed), parsed, chunked and embedded,
+the failures by stage and reason, and the counts of claim types and outcomes.
+`reclamos corpus reindex` rebuilds the search index; see
+[Retrieval](retrieval.md#re-indexing).
 
 ## Dataset export
 
@@ -124,11 +153,11 @@ no PDFs, no embeddings and no cards. The command refuses to write when a
 resolution that has a body, or a rule document, has no redacted text at the
 current version; run `reclamos corpus crawl` and `reclamos rules sync` first.
 
-- `resolutions.jsonl`: one row per resolution — `id`, `page_url`, `expediente`,
-  `published_on`, `summary`, `pdf_url`, `pdf_sha256`, `pdf_bytes`, `page_count`,
-  `ocr_pages`, `text_method`, the parsed fields (`number`, `resolved_on`,
-  `operator`, `subject`, `claim_type`, `appeal_kind`, `outcome`, `is_precedent`)
-  and `text`, the redacted body.
+- `resolutions.jsonl`: one row per resolution — `id`, `sector`, `page_url`,
+  `expediente`, `published_on`, `summary`, `pdf_url`, `pdf_sha256`, `pdf_bytes`,
+  `page_count`, `ocr_pages`, `text_method`, the parsed fields (`number`,
+  `resolved_on`, `operator`, `subject`, `claim_type`, `appeal_kind`, `outcome`,
+  `is_precedent`) and `text`, the redacted body.
 - `passages.jsonl`: one row per chunk — `resolution_id`, `ordinal`, `section`,
   `page_start`, `page_end`, `char_start`, `char_end` (offsets into the redacted
   text) and `text`.

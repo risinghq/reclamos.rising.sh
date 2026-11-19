@@ -68,6 +68,11 @@ the note that reads `Fecha de corte de la información`. The command exits with
 an error when a workbook is missing, holds no rows, has a file number it cannot
 read, or states no cut date.
 
+Osinergmin publishes open datasets at <https://www.datosabiertos.gob.pe> and
+osinergmin.gob.pe, but none holds per-case JARU outcomes with an expediente
+number the corpus can join. The outcome statistics therefore remain
+telecom-only, and the [web page](web.md#sectors) says so on an energy question.
+
 ## Counting
 
 The two workbooks join on the file number, year and type. A file counts once,
