@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS resolutions (
     embedded_at timestamptz,
 
     failure_stage text CHECK (
-        failure_stage IN ('download', 'extract', 'parse', 'chunk', 'embed')
+        failure_stage IN ('download', 'extract', 'redact', 'parse', 'chunk', 'embed')
     ),
     failure_reason text,
     failure_detail text,
@@ -111,6 +111,21 @@ CREATE INDEX IF NOT EXISTS resolutions_filter_idx
 ALTER TABLE resolutions
     ADD COLUMN IF NOT EXISTS is_precedent boolean NOT NULL DEFAULT false;
 
+-- `body` keeps the extracted source. `redacted_body` is what chunks, cards
+-- and exports are built from; `redactor_version` marks the redactor that
+-- wrote it, so a better one re-runs the step.
+ALTER TABLE resolutions
+    ADD COLUMN IF NOT EXISTS redacted_body text,
+    ADD COLUMN IF NOT EXISTS redactor_version text,
+    ADD COLUMN IF NOT EXISTS redacted_at timestamptz;
+
+ALTER TABLE resolutions
+    DROP CONSTRAINT IF EXISTS resolutions_failure_stage_check;
+ALTER TABLE resolutions
+    ADD CONSTRAINT resolutions_failure_stage_check CHECK (
+        failure_stage IN ('download', 'extract', 'redact', 'parse', 'chunk', 'embed')
+    );
+
 CREATE TABLE IF NOT EXISTS rule_documents (
     slug text PRIMARY KEY,
     title text NOT NULL,
@@ -134,6 +149,10 @@ ALTER TABLE rule_documents
 
 ALTER TABLE rule_documents
     ADD COLUMN IF NOT EXISTS source_sha256 text NOT NULL DEFAULT '';
+
+ALTER TABLE rule_documents
+    ADD COLUMN IF NOT EXISTS redacted_body text,
+    ADD COLUMN IF NOT EXISTS redactor_version text;
 
 CREATE TABLE IF NOT EXISTS rule_passages (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -196,6 +215,9 @@ CREATE TABLE IF NOT EXISTS cards (
     unsupported jsonb,
     judged_at timestamptz
 );
+
+ALTER TABLE cards
+    ADD COLUMN IF NOT EXISTS redactor_version text;
 
 CREATE TABLE IF NOT EXISTS outcome_source (
     only_row boolean PRIMARY KEY DEFAULT true CHECK (only_row),

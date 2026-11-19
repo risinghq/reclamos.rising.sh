@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from reclamos_api.corpus.redact import LABELS, REDACTOR_VERSION
+
 
 @dataclass(frozen=True, slots=True)
 class CorpusStats:
@@ -8,6 +10,8 @@ class CorpusStats:
     downloaded: int
     extracted: int
     extraction_methods: dict[str, int]
+    redacted: int
+    redaction_labels: dict[str, int]
     parsed: int
     chunked: int
     chunks: int
@@ -30,11 +34,24 @@ async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
             SELECT count(*) AS found,
                    count(downloaded_at) AS downloaded,
                    count(extracted_at) AS extracted,
+                   count(redacted_at) FILTER (
+                       WHERE redactor_version = $1
+                   ) AS redacted,
                    count(parsed_at) AS parsed,
                    count(chunked_at) AS chunked,
                    count(embedded_at) AS embedded
             FROM resolutions
-            """
+            """,
+            REDACTOR_VERSION,
+        )
+        label_rows = await connection.fetch(
+            "SELECT label, sum(n) AS n FROM ("
+            + " UNION ALL ".join(
+                f"SELECT '{name}' AS label, regexp_count(redacted_body, '{_pattern(label)}') AS n "
+                "FROM resolutions WHERE redacted_body IS NOT NULL"
+                for name, label in LABELS.items()
+            )
+            + ") counts GROUP BY label"
         )
         chunks = await connection.fetchval("SELECT count(*) FROM chunks")
         methods = await connection.fetch(
@@ -68,6 +85,8 @@ async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
         downloaded=totals["downloaded"],
         extracted=totals["extracted"],
         extraction_methods={row[0]: row[1] for row in methods},
+        redacted=totals["redacted"],
+        redaction_labels={row["label"]: row["n"] for row in label_rows},
         parsed=totals["parsed"],
         chunked=totals["chunked"],
         chunks=chunks,
@@ -86,6 +105,8 @@ def format_stats(stats: CorpusStats) -> str:
         f"downloaded              {stats.downloaded}",
         f"extracted               {stats.extracted}"
         + _breakdown(stats.extraction_methods),
+        f"redacted                {stats.redacted}"
+        + _breakdown({LABELS[k]: v for k, v in stats.redaction_labels.items()}),
         f"parsed                  {stats.parsed}",
         f"chunked                 {stats.chunked}  ({stats.chunks} chunks)",
         f"embedded                {stats.embedded}",
@@ -104,6 +125,10 @@ def format_stats(stats: CorpusStats) -> str:
         lines.append("queue jobs that exhausted their attempts")
         lines.extend(_counts(stats.failed_jobs))
     return "\n".join(lines)
+
+
+def _pattern(label: str) -> str:
+    return "\\" + label[0] + label[1:-1] + "\\" + label[-1]
 
 
 def _breakdown(counts: dict[str, int]) -> str:

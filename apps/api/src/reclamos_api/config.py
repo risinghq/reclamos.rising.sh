@@ -28,6 +28,7 @@ class Settings:
     s3_endpoint_url: str | None = None
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     embedding_cache_path: str = ".data/models"
+    redaction_model: str = "es_core_news_sm"
     anthropic_api_key: str | None = field(default=None, repr=False)
     openrouter_api_key: str | None = field(default=None, repr=False)
     judge_model: str = DEFAULT_JUDGE_MODEL
@@ -50,6 +51,7 @@ class Settings:
             s3_endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
             embedding_model=os.environ.get("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
             embedding_cache_path=os.environ.get("EMBEDDING_CACHE_PATH", ".data/models"),
+            redaction_model=os.environ.get("REDACTION_MODEL", "es_core_news_sm"),
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY") or None,
             openrouter_api_key=os.environ.get("OPENROUTER_API_KEY") or None,
             judge_model=os.environ.get("JUDGE_MODEL", DEFAULT_JUDGE_MODEL),

@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from reclamos_api.corpus.chunk import Chunk
 from reclamos_api.corpus.parse import Parsed
+from reclamos_api.corpus.redact import REDACTOR_VERSION
 from reclamos_api.corpus.site import ListedResolution
 
 Connection = Any
@@ -37,6 +38,10 @@ def next_stage(row: Any) -> str | None:
         return "download"
     if row["extracted_at"] is None:
         return "extract"
+    # A redactor version that no longer matches re-runs the step, which drops
+    # the chunks and embeddings built from its text.
+    if row["redacted_at"] is None or row["redactor_version"] != REDACTOR_VERSION:
+        return "redact"
     if row["chunked_at"] is None:
         return "chunk"
     if row["embedded_at"] is None:
@@ -51,11 +56,55 @@ async def unfinished_ids(connection: Connection) -> list[int]:
         """
         SELECT id FROM resolutions
         WHERE downloaded_at IS NULL OR extracted_at IS NULL OR parsed_at IS NULL
-           OR chunked_at IS NULL OR embedded_at IS NULL
+           OR chunked_at IS NULL OR embedded_at IS NULL OR redacted_at IS NULL
+           OR redactor_version IS DISTINCT FROM $1
         ORDER BY id
-        """
+        """,
+        REDACTOR_VERSION,
     )
     return [row["id"] for row in rows]
+
+
+async def record_redaction(
+    connection: Connection, resolution_id: int, redacted_body: str
+) -> None:
+    """Store the redacted text and drop what was built from the previous one:
+    the chunks are gone and their vectors with them. An unchanged redaction
+    bumps the version stamp only, so a redactor change that produces the same
+    text does not rebuild chunks and embeddings."""
+    async with connection.transaction():
+        previous = await connection.fetchval(
+            "SELECT redacted_body FROM resolutions WHERE id = $1", resolution_id
+        )
+        if previous == redacted_body:
+            await connection.execute(
+                """
+                UPDATE resolutions
+                SET redactor_version = $2, redacted_at = now(),
+                    failure_stage = NULL, failure_reason = NULL,
+                    failure_detail = NULL, failed_at = NULL
+                WHERE id = $1
+                """,
+                resolution_id,
+                REDACTOR_VERSION,
+            )
+            return
+        await connection.execute(
+            "DELETE FROM chunks WHERE resolution_id = $1", resolution_id
+        )
+        await connection.execute(
+            """
+            UPDATE resolutions
+            SET redacted_body = $2, redactor_version = $3, redacted_at = now(),
+                chunked_at = NULL, embedded_at = NULL,
+                failure_stage = NULL, failure_reason = NULL, failure_detail = NULL,
+                failed_at = NULL
+            WHERE id = $1
+            """,
+            resolution_id,
+            redacted_body,
+            REDACTOR_VERSION,
+        )
 
 
 async def record_chunks(

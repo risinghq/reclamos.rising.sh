@@ -6,6 +6,7 @@ from rqueue import Queue, Worker  # pyright: ignore[reportMissingTypeStubs]
 
 from reclamos_api.config import Settings
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
+from reclamos_api.corpus.redact import redactor_from_settings
 from reclamos_api.corpus.site import Fetcher
 from reclamos_api.corpus.store import store_from_settings
 from reclamos_api.retrieval.embedder import embedder_from_settings
@@ -44,6 +45,7 @@ async def run_worker() -> None:
             store_from_settings(settings),
             fetcher,
             embedder_from_settings(settings),
+            redactor_from_settings(settings),
         ).register()
         try:
             await Worker(

@@ -10,6 +10,7 @@ from reclamos_api.corpus import repository
 from reclamos_api.corpus.chunk import chunk_text
 from reclamos_api.corpus.extract import ExtractionError, extract_text
 from reclamos_api.corpus.parse import parse_resolution
+from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import (
     Fetcher,
     FetchError,
@@ -53,12 +54,14 @@ class Pipeline:
         store: ObjectStore,
         fetcher: Fetcher,
         embedder: Embedder,
+        redactor: Redactor,
     ) -> None:
         self.pool = pool
         self.queue = queue
         self.store = store
         self.fetcher = fetcher
         self.embedder = embedder
+        self.redactor = redactor
 
     def register(self) -> None:
         self.queue.register(name=DISCOVER, handler=self.discover)
@@ -67,6 +70,9 @@ class Pipeline:
         )
         self.queue.register(
             name="corpus.extract", handler=self._guarded("extract", self._extract)
+        )
+        self.queue.register(
+            name="corpus.redact", handler=self._guarded("redact", self._redact)
         )
         self.queue.register(
             name="corpus.parse", handler=self._guarded("parse", self._parse)
@@ -231,10 +237,21 @@ class Pipeline:
                     parse_resolution(row["body"], summary=row["summary"] or ""),
                 )
 
+    async def _redact(self, resolution_id: int) -> None:
+        row = await self._row(resolution_id)
+        if row["redacted_at"] is None or row["redactor_version"] != (
+            self.redactor.version
+        ):
+            async with self.pool.acquire() as connection:
+                await repository.record_redaction(
+                    connection, resolution_id, self.redactor.redact(row["body"] or "")
+                )
+        await self._advance_resolution(resolution_id)
+
     async def _chunk(self, resolution_id: int) -> None:
         row = await self._row(resolution_id)
         if row["chunked_at"] is None:
-            chunks = chunk_text(row["body"])
+            chunks = chunk_text(row["redacted_body"] or "")
             async with self.pool.acquire() as connection:
                 await repository.record_chunks(connection, resolution_id, chunks)
         await self._advance_resolution(resolution_id)
