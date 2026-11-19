@@ -10,6 +10,7 @@ it.
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, cast
@@ -144,6 +145,20 @@ class Card:
     # What the check dropped: points with no text or with a quote not in the
     # body, and readings whose value or quote failed.
     rejected: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+
+
+def redact_card(card: Card, redact: Callable[[str], str]) -> None:
+    """Replace identifying data in the card's text, quotes and rejections."""
+    for name, points in card.fields.items():
+        card.fields[name] = tuple(
+            Point(redact(point.text), redact(point.quote)) for point in points
+        )
+    for name, reading in card.readings.items():
+        card.readings[name] = Reading(redact(reading.value), redact(reading.quote))
+    for entry in card.rejected:
+        for key in ("text", "quote", "value"):
+            if isinstance(entry.get(key), str) and entry[key]:
+                entry[key] = redact(entry[key])
 
 
 class Unreadable(Exception):

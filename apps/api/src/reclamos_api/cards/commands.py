@@ -7,12 +7,19 @@ import re
 from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from reclamos_api.cards import repository
-from reclamos_api.cards.card import FIELDS, PROMPT_VERSION, Unreadable, write_card
+from reclamos_api.cards.card import (
+    FIELDS,
+    PROMPT_VERSION,
+    Unreadable,
+    redact_card,
+    write_card,
+)
 from reclamos_api.cards.judge import JUDGE_VERSION, judge_card
 from reclamos_api.config import Settings
+from reclamos_api.corpus.redact import redactor_from_settings
 from reclamos_api.db import database_pool
 from reclamos_api.llm.client import LanguageModel, NotBilled, ProviderFailed
 from reclamos_api.llm.quotes import normalize
@@ -34,6 +41,7 @@ async def build(
     budget = Budget(budget_usd)
     failed: list[str] = []
     written = 0
+    redactor = redactor_from_settings(settings)
     async with database_pool(
         settings.database_url, queue_schema=settings.queue_schema
     ) as pool:
@@ -53,6 +61,7 @@ async def build(
             except ProviderFailed as error:
                 failed.append(f"{source.resolution_id}: the provider failed: {error}")
                 return
+            redact_card(card, redactor.redact)
             async with pool.acquire() as connection:
                 await repository.save_card(
                     connection, source, card, model=settings.card_model, usd=usd
@@ -116,6 +125,50 @@ async def judge(
         lines.append(f"stopped: {stopped}")
     lines.append(f"spent US${budget.spent_usd:.4f} of US${budget_usd:.2f}")
     return "\n".join(lines)
+
+
+async def redact(settings: Settings) -> str:
+    """Redact every stored card the current redactor has not written. The card
+    keeps `written_at` and its verdict: only the text changes."""
+    redactor = redactor_from_settings(settings)
+    updated = 0
+    async with (
+        database_pool(
+            settings.database_url, queue_schema=settings.queue_schema
+        ) as pool,
+        pool.acquire() as connection,
+    ):
+        for row in await repository.unredacted(connection):
+            fields = _redact_json(row["fields"], redactor.redact)
+            readings = _redact_json(row["readings"], redactor.redact)
+            rejected = _redact_json(row["rejected"], redactor.redact)
+            await repository.apply_redaction(
+                connection,
+                row["resolution_id"],
+                fields=fields,
+                readings=readings,
+                rejected=rejected,
+            )
+            updated += 1
+    return f"cards redacted: {updated}"
+
+
+def _redact_json(stored: Any, redact: Callable[[str], str]) -> str:
+    """The JSON text with every string value redacted, structure unchanged."""
+    data = json.loads(stored)
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, str):
+            return redact(value)
+        if isinstance(value, list):
+            return [walk(item) for item in cast("list[Any]", value)]
+        if isinstance(value, dict):
+            return {
+                key: walk(item) for key, item in cast("dict[str, Any]", value).items()
+            }
+        return value
+
+    return json.dumps(walk(data))
 
 
 async def _run_all[T](

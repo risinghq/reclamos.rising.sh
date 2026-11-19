@@ -7,6 +7,7 @@ from typing import Any
 
 from reclamos_api.cards.card import PROMPT_VERSION, Card, Point, Points
 from reclamos_api.cards.judge import JUDGE_VERSION
+from reclamos_api.corpus.redact import REDACTOR_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,8 +46,8 @@ async def save_card(
     await connection.execute(
         """
         INSERT INTO cards (resolution_id, prompt_version, body_sha256, model,
-                           fields, readings, rejected, usd)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::float8)
+                           fields, readings, rejected, usd, redactor_version)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::float8, $9)
         ON CONFLICT (resolution_id) DO UPDATE SET
             prompt_version = excluded.prompt_version,
             body_sha256 = excluded.body_sha256,
@@ -55,6 +56,7 @@ async def save_card(
             readings = excluded.readings,
             rejected = excluded.rejected,
             usd = excluded.usd,
+            redactor_version = excluded.redactor_version,
             written_at = now(),
             judge_model = NULL,
             judge_version = NULL,
@@ -74,6 +76,7 @@ async def save_card(
         json.dumps({name: asdict(r) for name, r in card.readings.items()}),
         json.dumps(card.rejected),
         usd,
+        REDACTOR_VERSION,
     )
 
 
@@ -83,6 +86,43 @@ def card_fields(stored: str) -> dict[str, Points]:
         name: tuple(Point(point["text"], point["quote"]) for point in points)
         for name, points in json.loads(stored).items()
     }
+
+
+async def unredacted(connection: Any) -> list[Any]:
+    """Cards whose stored text was not redacted by the current redactor."""
+    return await connection.fetch(
+        """
+        SELECT resolution_id, fields, readings, rejected FROM cards
+        WHERE redactor_version IS DISTINCT FROM $1
+        ORDER BY resolution_id
+        """,
+        REDACTOR_VERSION,
+    )
+
+
+async def apply_redaction(
+    connection: Any,
+    resolution_id: int,
+    *,
+    fields: str,
+    readings: str,
+    rejected: str,
+) -> None:
+    """Store the redacted card content. `written_at` and the judge columns do
+    not change: the card is the same model output, redacted in place."""
+    await connection.execute(
+        """
+        UPDATE cards
+        SET fields = $2::jsonb, readings = $3::jsonb, rejected = $4::jsonb,
+            redactor_version = $5
+        WHERE resolution_id = $1
+        """,
+        resolution_id,
+        fields,
+        readings,
+        rejected,
+        REDACTOR_VERSION,
+    )
 
 
 async def unjudged(connection: Any) -> list[tuple[int, dict[str, Points]]]:

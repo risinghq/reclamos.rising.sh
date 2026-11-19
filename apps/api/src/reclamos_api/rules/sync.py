@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from reclamos_api.corpus.extract import OCR_DPI, OCR_PAGE_SEGMENTATION, extract_text
+from reclamos_api.corpus.redact import REDACTOR_VERSION, Redactor
 from reclamos_api.corpus.repository import vector_literal
 from reclamos_api.corpus.store import ObjectStore
 from reclamos_api.retrieval.embedder import Embedder
@@ -576,6 +577,7 @@ def _expected_bytes(response: httpx.Response, received: int) -> int | None:
 def _build_hash(source: RuleSource, dependencies: Sequence[RuleSource]) -> str:
     payload = {
         "version": RULES_VERSION,
+        "redactor": REDACTOR_VERSION,
         "source": source.slug,
         "dependencies": [asdict(item) for item in dependencies],
     }
@@ -588,6 +590,7 @@ async def sync(
     pool: Any,
     store: ObjectStore,
     embedder: Embedder,
+    redactor: Redactor,
     *,
     sources: Sequence[RuleSource] = SOURCES,
     download: Download = _download,
@@ -640,14 +643,18 @@ async def sync(
                 await connection.execute(
                     """
                     INSERT INTO rule_documents (slug, title, kind, approved_by, text_date,
-                                                pdf_url, pdf_key, pdf_sha256, body, source_sha256,
-                                                build_sha256, visitor_searchable)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                                pdf_url, pdf_key, pdf_sha256, body,
+                                                redacted_body, redactor_version,
+                                                source_sha256, build_sha256,
+                                                visitor_searchable)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title,
                         kind = EXCLUDED.kind, approved_by = EXCLUDED.approved_by,
                         text_date = EXCLUDED.text_date, pdf_url = EXCLUDED.pdf_url,
                         pdf_key = EXCLUDED.pdf_key, pdf_sha256 = EXCLUDED.pdf_sha256,
                         body = EXCLUDED.body,
+                        redacted_body = EXCLUDED.redacted_body,
+                        redactor_version = EXCLUDED.redactor_version,
                         source_sha256 = EXCLUDED.source_sha256,
                         visitor_searchable = EXCLUDED.visitor_searchable,
                         synced_at = now()
@@ -661,9 +668,25 @@ async def sync(
                     f"rules/{source.slug}.pdf",
                     hashes[source.slug],
                     bodies[source.slug],
+                    redactor.redact(bodies[source.slug]),
+                    REDACTOR_VERSION,
                     _build_hash(source, [source]),
                     _build_hash(source, [source]),
                     source.visitor_searchable,
+                )
+            # A document whose text did not change still needs a redacted body
+            # at the current version, and a modificatoria has no passages that
+            # would rebuild it below.
+            for source in sources:
+                await connection.execute(
+                    """
+                    UPDATE rule_documents
+                    SET redacted_body = $2, redactor_version = $3
+                    WHERE slug = $1 AND redactor_version IS DISTINCT FROM $3
+                    """,
+                    source.slug,
+                    redactor.redact(bodies[source.slug]),
+                    REDACTOR_VERSION,
                 )
             await connection.execute(
                 "INSERT INTO embedding_model (model) VALUES ($1) ON CONFLICT DO NOTHING",
@@ -712,7 +735,8 @@ async def sync(
                 await connection.execute(
                     "DELETE FROM rule_passages WHERE document_slug = $1", source.slug
                 )
-                vectors = await embedder.embed_passages([part.text for part in parts])
+                texts = [redactor.redact(part.text) for part in parts]
+                vectors = await embedder.embed_passages(texts)
                 await connection.executemany(
                     """
                     INSERT INTO rule_passages (document_slug, ordinal, label, text_source,
@@ -727,11 +751,11 @@ async def sync(
                             part.origin.approved_by,
                             part.origin.text_date,
                             part.origin.pdf_url,
-                            part.text,
+                            text,
                             vector_literal(vector),
                         )
-                        for ordinal, (part, vector) in enumerate(
-                            zip(parts, vectors, strict=True)
+                        for ordinal, (part, text, vector) in enumerate(
+                            zip(parts, texts, vectors, strict=True)
                         )
                     ],
                 )
