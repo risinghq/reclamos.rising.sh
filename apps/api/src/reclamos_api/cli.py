@@ -12,7 +12,9 @@ from rqueue import Queue, Worker  # pyright: ignore[reportMissingTypeStubs]
 from reclamos_api.cards import commands as card_commands
 from reclamos_api.config import Settings
 from reclamos_api.corpus import repository
+from reclamos_api.corpus.export import ExportError, export_dataset
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
+from reclamos_api.corpus.redact import redactor_from_settings
 from reclamos_api.corpus.site import Fetcher
 from reclamos_api.corpus.stats import collect_stats, format_stats
 from reclamos_api.corpus.store import store_from_settings
@@ -109,6 +111,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=None, help="write at most N cards"
     )
     card_actions.add_parser("report", help="print what the cards hold and drop")
+    card_actions.add_parser(
+        "redact",
+        help="redact the stored card fields and readings with the current redactor",
+    )
+
+    dataset = commands.add_parser(
+        "dataset", help="export the corpus as JSONL files for publication"
+    )
+    dataset_actions = dataset.add_subparsers(dest="action", required=True)
+    exporting = dataset_actions.add_parser(
+        "export", help="write the redacted corpus as JSONL files"
+    )
+    exporting.add_argument("directory", type=Path, help="where to write the files")
 
     outcomes = commands.add_parser(
         "outcomes", help="how the tribunal decided every file, from PUNKU"
@@ -167,7 +182,12 @@ async def crawl(
     ) as pool:
         queue = Queue(pool, name=QUEUE_NAME, schema=settings.queue_schema)
         pipeline = Pipeline(
-            pool, queue, store_from_settings(settings), fetcher, embedder
+            pool,
+            queue,
+            store_from_settings(settings),
+            fetcher,
+            embedder,
+            redactor_from_settings(settings),
         )
         pipeline.register()
         if reset is not None:
@@ -216,6 +236,8 @@ async def run(
         return await run_gate(arguments, settings, embedder)
     if arguments.command == "cards":
         return await run_cards(arguments, settings, model)
+    if arguments.command == "dataset":
+        return await export_dataset(settings, arguments.directory)
     if arguments.command == "outcomes":
         return await outcome_commands.load(settings, arguments.zip)
     if arguments.command == "rules":
@@ -226,6 +248,7 @@ async def run(
                 pool,
                 store_from_settings(settings),
                 embedder or embedder_from_settings(settings),
+                redactor_from_settings(settings),
             )
         return "\n".join(f"{slug}: {count}" for slug, count in counts.items())
     if arguments.action in ("crawl", "reindex"):
@@ -257,6 +280,8 @@ async def run_cards(
 ) -> str:
     if arguments.action == "report":
         return await card_commands.report(settings)
+    if arguments.action == "redact":
+        return await card_commands.redact(settings)
     building = arguments.action == "build"
     if model is None:
         try:
@@ -322,7 +347,7 @@ def main(
                 run(arguments, Settings.from_environment(), fetcher, embedder, model)
             )
         )
-    except (DatasetError, QuestionFileError, SourceError) as error:
+    except (DatasetError, QuestionFileError, SourceError, ExportError) as error:
         raise SystemExit(str(error)) from error
 
 
