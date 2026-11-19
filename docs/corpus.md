@@ -32,11 +32,13 @@ number is recorded as `not_jaru`. Skipped rows stay in the table for the
 statistics and never move to `corpus.download`.
 
 The crawler follows the robots rules of each host. gob.pe disallows `?sheet=`
-pagination, so the crawler never pages. It asks the collection for one
-publication-date window at a time with `filter[start_date]`, `filter[end_date]`
-and `filter[per_page]=100`. When a window reports more entries than it shows, it
-is split in two until it fits. A single day with more entries than one page
-cannot be split further, so it is recorded in `listing_failures` with the reason
+pagination, so the crawler never pages, but `filter[per_page]` accepts sizes
+above 100. It asks the collection for one publication-date window at a time with
+`filter[start_date]`, `filter[end_date]` and `filter[per_page]=100`. When a
+window reports more entries than it shows, it is split in two until it fits. A
+single day cannot be split, so it is asked for again with `filter[per_page]` set
+to its entry count. Only when that answer still shows fewer entries than the
+count is the day recorded in `listing_failures` with the reason
 `listing_truncated` under the collection's source slug, and `corpus stats` lists
 it.
 

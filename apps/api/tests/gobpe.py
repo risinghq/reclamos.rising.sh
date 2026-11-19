@@ -6,6 +6,7 @@ PDF of three of them. The other five entries have no recorded page, so the
 stand-in answers 404 for them, as it does for anything unrecorded.
 """
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -20,6 +21,27 @@ EMPTY_LISTING = (
     '$(".js-official-documents-search-count").html("0 resultados")\n'
     '$(".js-official-documents-search-results").html("")'
 )
+
+
+def card(resolution_id: int, title: str, published: str) -> str:
+    """One result card, shaped as the collection listing renders them."""
+    return (
+        '<div class="p-4 shadow-campaign-card">'
+        f'<div class="border-b">{published}</div>'
+        f'<a href="/institucion/osiptel/normas-legales/{resolution_id}-x">'
+        f"{title}</a></div>"
+    )
+
+
+def listing_js(total: int, cards: str) -> str:
+    """The JavaScript the collection form answers: a count and the cards."""
+    return (
+        "$('.js-official-documents-search-count')"
+        f".html({json.dumps(f'{total} resultados')})\n"
+        "$('.js-official-documents-search-results')"
+        f".html({json.dumps(cards)})"
+    )
+
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gobpe"
 RECORDED_IDS = (6134934, 6134935, 6134941)

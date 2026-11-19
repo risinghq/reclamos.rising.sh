@@ -9,7 +9,14 @@ import asyncpg
 import httpx
 import pytest
 from fakeembed import HashingEmbedder
-from gobpe import FIXTURES, LISTED_IDS, RECORDED_IDS, RecordedSite
+from gobpe import (
+    FIXTURES,
+    LISTED_IDS,
+    RECORDED_IDS,
+    RecordedSite,
+    card,
+    listing_js,
+)
 from reclamos_api import cli
 from reclamos_api.config import Settings
 from reclamos_api.corpus import repository
@@ -291,13 +298,65 @@ def test_a_day_with_more_entries_than_a_page_is_recorded_as_a_failed_listing(
     assert "listing windows that could not be read" in output
     # The window is final: the job finished instead of failing and retrying.
     assert query(environment, "SELECT 1 FROM resolutions") == []
+    collection = OSIPTEL.collection_url.removeprefix("https://www.gob.pe")
     osiptel_requests = [
         r
         for r in site.requests
-        if "filter[start_date]" in r.url.params
-        and r.url.path == OSIPTEL.collection_url.removeprefix("https://www.gob.pe")
+        if "filter[start_date]" in r.url.params and r.url.path == collection
     ]
-    assert len(osiptel_requests) == 1
+    # The day is asked for again with the page size set to its count.
+    assert [r.url.params["filter[per_page]"] for r in osiptel_requests] == [
+        "100",
+        "250",
+    ]
+
+    # A day whose count exceeds a page is listed in full on the second ask.
+    big_site = RecordedSite()
+    cards = [
+        card(
+            7000000 + i,
+            f"Expediente N.° {i:07d}-2025/TRASU/ST-RA",
+            "15 de abril de 2025",
+        )
+        for i in range(1, 151)
+    ]
+
+    def first_page_only(request: httpx.Request) -> httpx.Response:
+        if (
+            "filter[start_date]" in request.url.params
+            and request.url.path == collection
+        ):
+            big_site.requests.append(request)
+            per_page = int(request.url.params["filter[per_page]"])
+            return httpx.Response(
+                200, text=listing_js(len(cards), "".join(cards[:per_page]))
+            )
+        return big_site(request)
+
+    crawl_main(
+        ["corpus", "crawl", "--since", "2025-04-15", "--until", "2025-04-15"],
+        fetcher=Fetcher.create(
+            min_interval=0, transport=httpx.MockTransport(first_page_only)
+        ),
+    )
+    capsys.readouterr()
+
+    big_requests = [
+        r
+        for r in big_site.requests
+        if "filter[start_date]" in r.url.params and r.url.path == collection
+    ]
+    assert [r.url.params["filter[per_page]"] for r in big_requests] == [
+        "100",
+        "150",
+    ]
+    listed = query(
+        environment,
+        "SELECT id FROM resolutions WHERE published_on = DATE '2025-04-15'",
+    )
+    assert len(listed) == 150
+    (failure,) = query(environment, "SELECT * FROM listing_failures")
+    assert failure["start_date"] == date(2022, 12, 31)
 
     # A later crawl that lists the day in full clears the failure.
     def listing_only(request: httpx.Request) -> httpx.Response:
@@ -314,7 +373,7 @@ def test_a_day_with_more_entries_than_a_page_is_recorded_as_a_failed_listing(
     capsys.readouterr()
 
     assert query(environment, "SELECT 1 FROM listing_failures") == []
-    assert len(query(environment, "SELECT 1 FROM resolutions")) == len(LISTED_IDS)
+    assert len(query(environment, "SELECT 1 FROM resolutions")) == len(LISTED_IDS) + 150
 
 
 def test_stats_of_an_empty_corpus(

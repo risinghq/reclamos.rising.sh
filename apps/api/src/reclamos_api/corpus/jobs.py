@@ -134,11 +134,18 @@ class Pipeline:
             date.fromisoformat(payload["end"]),
         )
         listing = await fetch_listing(self.fetcher, source, start, end)
+        if start == end and listing.total > len(listing.items):
+            # A single day cannot be split, but gob.pe honours
+            # filter[per_page] above PAGE_SIZE, so ask for every entry of the
+            # window on one page.
+            listing = await fetch_listing(
+                self.fetcher, source, start, end, per_page=listing.total
+            )
         async with self.pool.acquire() as connection, connection.transaction():
             if listing.total > len(listing.items):
                 if start == end:
-                    # Retrying cannot show more entries, so the window is
-                    # recorded as failed and the job is done.
+                    # The full-size page still shows fewer entries than the
+                    # count, so the window is recorded as failed.
                     await repository.record_listing_failure(
                         connection,
                         source.slug,

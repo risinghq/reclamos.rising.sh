@@ -237,19 +237,25 @@ def parse_spanish_date(text: str) -> date:
 
 
 async def fetch_listing(
-    fetcher: Fetcher, source: Source, start: date, end: date
+    fetcher: Fetcher,
+    source: Source,
+    start: date,
+    end: date,
+    *,
+    per_page: int = PAGE_SIZE,
 ) -> Listing:
     """List the compendium entries published from `start` to `end` inclusive.
 
     The form that filters by date answers an XHR with JavaScript that replaces
     the count and the result cards. robots.txt disallows `sheet=` pagination,
-    so a window with more than PAGE_SIZE entries has to be split by the caller.
+    but `filter[per_page]` accepts sizes above PAGE_SIZE. A window wider than
+    the page it returns has to be split by the caller.
     """
     response = await fetcher.get(
         source.collection_url,
         params={
             "filter[order]": "publication_asc",
-            "filter[per_page]": str(PAGE_SIZE),
+            "filter[per_page]": str(per_page),
             "filter[start_date]": start.isoformat(),
             "filter[end_date]": end.isoformat(),
         },
