@@ -24,6 +24,22 @@ BRANDS: dict[str, tuple[str, ...]] = {
     "Win": ("WIN NET - TELECOM S.A.C.", "WI-NET TELECOM S.A.C."),
     "DirecTV": ("DIRECTV PERU S.R.L.",),
     "Americatel": ("AMERICATEL PERU S.A.",),
+    "Luz del Sur": ("LUZ DEL SUR S.A.A.",),
+    "Enel": (
+        "ENEL DISTRIBUCION PERU S.A.A.",
+        "PLUZ ENERGIA PERU S.A.A.",
+        "ENEL GENERACION PERU S.A.A.",
+    ),
+    "Hidrandina": ("HIDRANDINA S.A.A.", "HIDRANDINA S.A."),
+    "Cálidda": (
+        "GAS NATURAL DE LIMA Y CALLAO S.A.",
+        "GAS NATURAL DE LIMA Y CALLAO S.R.L.",
+    ),
+    "Quavii": ("GASES DEL PACIFICO S.A.C.",),
+    "Contugas": ("CONTUGAS S.A.C.",),
+    "Seal": ("SOCIEDAD ELECTRICA DE AREQUIPA S.A.", "SEAL S.A."),
+    "Electrocentro": ("ELECTRO CENTRO S.A.",),
+    "Electro Sur Este": ("ELECTRO SUR ESTE S.A.",),
 }
 
 # The words a visitor writes for each brand, without accents. "claro" is also a
@@ -38,6 +54,15 @@ _WORDS: dict[str, tuple[str, ...]] = {
     "Win": ("win",),
     "DirecTV": ("directv", "direct tv"),
     "Americatel": ("americatel",),
+    "Luz del Sur": ("luz del sur",),
+    "Enel": ("enel", "pluz"),
+    "Hidrandina": ("hidrandina",),
+    "Cálidda": ("calidda",),
+    "Quavii": ("quavii",),
+    "Contugas": ("contugas",),
+    "Seal": ("seal",),
+    "Electrocentro": ("electrocentro", "electro centro"),
+    "Electro Sur Este": ("electro sur este",),
 }
 
 _PATTERNS = {

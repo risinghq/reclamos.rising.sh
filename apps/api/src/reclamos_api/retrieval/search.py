@@ -22,6 +22,7 @@ RRF_K = 60
 @dataclass(frozen=True, slots=True)
 class Filters:
     claim_type: str | None = None
+    sector: str | None = None
     operator: str | None = None
     outcome: str | None = None
     date_from: date | None = None
@@ -36,6 +37,7 @@ class Filters:
         values: list[Any] = []
         for condition, value in (
             ("r.claim_type = {}", self.claim_type),
+            ("r.sector = {}", self.sector),
             ("r.operator = {}", self.operator),
             ("r.outcome = {}", self.outcome),
             ("r.resolved_on >= {}", self.date_from),
@@ -181,6 +183,7 @@ async def _attach_chunks(connection: Any, hits: list[Hit]) -> None:
         SELECT c.resolution_id, c.ordinal, c.section, c.page_start, c.page_end,
                c.char_start, c.char_end, c.text,
                r.expediente, r.number, r.resolved_on, r.operator, r.claim_type, r.outcome, r.page_url,
+               r.sector,
                r.pdf_url
                , r.is_precedent
         FROM unnest($1::bigint[], $2::integer[]) AS wanted (resolution_id, ordinal)

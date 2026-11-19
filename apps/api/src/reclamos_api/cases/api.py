@@ -1,5 +1,6 @@
 """The `POST /cases` route."""
 
+from dataclasses import replace
 from datetime import date
 from typing import Literal
 
@@ -13,6 +14,7 @@ from reclamos_api.cases.find import (
     find_cases,
     outcome_counts,
 )
+from reclamos_api.cases.sectors import sector_of
 from reclamos_api.outcomes.serve import Statistics, statistics
 from reclamos_api.retrieval.api import QueryRequest
 from reclamos_api.retrieval.search import IndexModelMismatch
@@ -39,6 +41,7 @@ class CardPoint(BaseModel):
 class FoundCase(BaseModel):
     resolution_id: int
     expediente: str
+    sector: str
     number: str | None
     date: date | None
     operator: str | None
@@ -59,6 +62,9 @@ class FoundCase(BaseModel):
 class CasesResponse(BaseModel):
     query: str
     outcome: Literal["found", "no_similar_case"]
+    # The sector the request asked for, or the one the query's words imply.
+    # None means the query named both sectors or neither and no filter applied.
+    sector: str | None
     # The brands the query names, whose cases come first.
     brands: list[str]
     outcomes: dict[str, int]
@@ -82,6 +88,8 @@ router = APIRouter()
 @router.post("/cases")
 async def cases(request: Request, body: CasesRequest) -> CasesResponse:
     state = request.app.state
+    sector = body.sector or sector_of(body.query)
+    filters = replace(body.filters(), sector=sector)
     try:
         found = await find_cases(
             state.pool,
@@ -89,7 +97,7 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
             query=body.query,
             limit=body.limit,
             min_similarity=state.min_similarity,
-            filters=body.filters(),
+            filters=filters,
         )
         rules: list[Rule] = []
         if found:
@@ -99,6 +107,7 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
                 query=body.query,
                 min_similarity=state.rules_min_similarity,
                 min_text_rank=state.rules_min_text_rank,
+                sector=sector,
             )
     except IndexModelMismatch as mismatch:
         raise HTTPException(status_code=503, detail=str(mismatch)) from None
@@ -108,6 +117,7 @@ async def cases(request: Request, body: CasesRequest) -> CasesResponse:
     return CasesResponse(
         query=body.query,
         outcome="found" if found else "no_similar_case",
+        sector=sector,
         brands=brands_named(body.query),
         outcomes=outcome_counts(found),
         cases=[
@@ -123,6 +133,7 @@ def _found_case(case: Case, counted: Statistics | None) -> FoundCase:
     return FoundCase(
         resolution_id=case.passage.resolution_id,
         expediente=fields["expediente"],
+        sector=fields["sector"],
         number=fields["number"],
         date=fields["resolved_on"],
         operator=fields["operator"],

@@ -119,6 +119,7 @@ def test_no_case_is_shown_below_the_similarity_threshold(
     assert found == {
         "query": "cobro indebido",
         "outcome": "no_similar_case",
+        "sector": None,
         "brands": [],
         "outcomes": {},
         "cases": [],

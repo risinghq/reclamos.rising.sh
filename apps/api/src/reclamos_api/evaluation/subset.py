@@ -16,6 +16,7 @@ from reclamos_api.retrieval.embedder import DIMENSION
 RESOLUTION_COLUMNS = (
     "id",
     "page_url",
+    "sector",
     "expediente",
     "published_on",
     "number",
@@ -115,7 +116,15 @@ async def load_subset(connection: Any, subset: Subset) -> None:
         for resolution in subset.resolutions:
             values = [
                 date.fromisoformat(v) if k in DATE_COLUMNS and v else v
-                for k, v in ((k, resolution[k]) for k in RESOLUTION_COLUMNS)
+                for k, v in (
+                    (
+                        k,
+                        resolution[k]
+                        if k != "sector"
+                        else resolution.get(k, "telecom"),
+                    )
+                    for k in RESOLUTION_COLUMNS
+                )
             ]
             await connection.execute(
                 f"""

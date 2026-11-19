@@ -13,6 +13,7 @@ from reclamos_api.corpus import repository
 from reclamos_api.corpus.chunk import chunk_text
 from reclamos_api.corpus.parse import parse_resolution
 from reclamos_api.corpus.site import ListedResolution
+from reclamos_api.corpus.sources import OSIPTEL
 from reclamos_api.db import database_pool
 from reclamos_api.evaluation.subset import (
     PrecomputedEmbedder,
@@ -269,6 +270,7 @@ async def seed_fixtures(pool: Any, embedder: HashingEmbedder) -> None:
             body = (FIXTURES / f"{resolution_id}.txt").read_text()
             await repository.upsert_listed(
                 connection,
+                OSIPTEL,
                 [
                     ListedResolution(
                         id=resolution_id,

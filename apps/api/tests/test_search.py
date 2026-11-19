@@ -17,6 +17,7 @@ from reclamos_api.corpus.chunk import chunk_text
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
 from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import Fetcher, ListedResolution
+from reclamos_api.corpus.sources import OSIPTEL
 from reclamos_api.corpus.store import LocalStore
 from reclamos_api.db import database_pool
 from reclamos_api.main import create_app
@@ -48,6 +49,8 @@ async def seed_and_run(
     *,
     only: list[int] | None = None,
     texts: dict[int, str] | None = None,
+    sources: dict[int, Any] | None = None,
+    expedientes: dict[int, str] | None = None,
     wait_for_retries: bool = False,
 ) -> None:
     """Store the extracted text of the resolutions, then run chunk and embed.
@@ -61,11 +64,15 @@ async def seed_and_run(
                     continue
                 await repository.upsert_listed(
                     connection,
+                    (sources or {}).get(resolution_id, OSIPTEL),
                     [
                         ListedResolution(
                             id=resolution_id,
                             page_url=f"https://www.gob.pe/institucion/osiptel/normas-legales/{resolution_id}-x",
-                            expediente="Expediente N.° 0000123-2022/TRASU/ST-RA",
+                            expediente=(expedientes or {}).get(
+                                resolution_id,
+                                "Expediente N.° 0000123-2022/TRASU/ST-RA",
+                            ),
                             published_on=date(2022, 12, 31),
                         )
                     ],

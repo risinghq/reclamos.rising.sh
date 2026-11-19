@@ -6,6 +6,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from reclamos_api.corpus.parse import CLAIM_TYPE_NAMES, OUTCOME_NAMES
+from reclamos_api.corpus.sources import SECTORS
 from reclamos_api.retrieval.search import Filters, IndexModelMismatch, Mode, search
 
 MAX_QUERY_CHARS = 500
@@ -29,6 +30,7 @@ class QueryRequest(BaseModel):
 
     query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     claim_type: Annotated[str, _one_of(CLAIM_TYPE_NAMES)] | None = None
+    sector: Annotated[str, _one_of(SECTORS)] | None = None
     operator: str | None = Field(default=None, min_length=1, max_length=120)
     outcome: Annotated[str, _one_of(OUTCOME_NAMES)] | None = None
     date_from: date | None = None
@@ -43,6 +45,7 @@ class QueryRequest(BaseModel):
     def filters(self) -> Filters:
         return Filters(
             claim_type=self.claim_type,
+            sector=self.sector,
             operator=self.operator,
             outcome=self.outcome,
             date_from=self.date_from,
@@ -58,6 +61,7 @@ class SearchRequest(QueryRequest):
 class SearchHit(BaseModel):
     resolution_id: int
     expediente: str
+    sector: str
     number: str | None
     date: date | None
     operator: str | None
@@ -109,6 +113,7 @@ def _response_hit(fields: dict[str, Any], hit: Any) -> SearchHit:
     return SearchHit(
         resolution_id=hit.resolution_id,
         expediente=fields["expediente"],
+        sector=fields["sector"],
         number=fields["number"],
         date=fields["resolved_on"],
         operator=fields["operator"],
