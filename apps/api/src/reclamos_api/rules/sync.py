@@ -55,6 +55,14 @@ _HEADING = re.compile(
     r"anexo\s*(?:n[°ºo.]?\s*)?\d+)[^\n]*)",
     re.IGNORECASE | re.MULTILINE,
 )
+_DISPOSITION_WORD = re.compile(
+    r"^\s*(?:primera|segunda|tercera|cuarta|quinta|sexta|s[eé]ptima|octava|novena)\b",
+    re.IGNORECASE,
+)
+_DISPOSITION_SECTION = re.compile(
+    r"disposiciones\s+complementarias\s+(finales|transitorias)",
+    re.IGNORECASE,
+)
 _SPIJ_NOTE = re.compile(
     r"\(\s*\*+\s*\)(?:(?!\(\s*\*+\s*\)).)*?"
     r"(?P<action>modificad[oa]|derogad[oa]).*?"
@@ -99,7 +107,12 @@ _BROKEN_DE = re.compile(
     r"\b(?P<word>[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]+(?:ción|sión|dad|tad|miento|mento|encia|"
     r"ancia|ario|aria|ible|ables|ados))de(?=\s)",
 )
-_PAGE_FOOTER = re.compile(r"(?m)^\s*\d+\s*\|\s*\d+\s*$")
+_PAGE_FOOTER = re.compile(
+    r"(?m)^\s*\d+\s*\|\s*\d+\s*$|"
+    r"^\s*[^\n]*Secretar[íi]a\s+T[ée]cnica[^\n]*$"
+    r"\s*\n\s*[^\n]*Actualizado\s+al:[^\n]*$"
+    r"\s*\n\s*[^\n]*Fuente:\s*SPIJ[^\n]*$"
+)
 _SIGNATURE_SIGNER = re.compile(
     r"firmado\s+digitalmente\s+por\b[\s\S]{0,200}?\bFAU\s+\d+\s+(?:soft|hard)\b",
     re.IGNORECASE,
@@ -137,6 +150,22 @@ _LINEAMIENTO_HEADING = re.compile(
 )
 _ITEM_START = re.compile(r"(?m)^\s*(?=(?:\d+(?:\.\d+)*|[A-Za-z])(?:[.)])\s+)")
 _PARAGRAPH_BREAK = re.compile(r"\n\s*\n+")
+
+
+def _disposition_label(match: re.Match[str], before: str) -> str:
+    word = match[0].strip().capitalize()
+    plain = match.string.lower()
+    if "transitoria" in plain:
+        kind = "Transitoria"
+    elif "final" in plain:
+        kind = "Final"
+    else:
+        kind = "Final"
+        for section in _DISPOSITION_SECTION.finditer(before):
+            kind = (
+                "Transitoria" if section.group(1).lower().startswith("t") else "Final"
+            )
+    return f"{word} Disposición Complementaria {kind}"
 
 
 def _label(heading: str) -> str:
@@ -183,6 +212,11 @@ def _served_text(text: str) -> str:
 def _current_text(source: RuleSource, body: str) -> str:
     if source.kind not in ("reglamento", "condiciones"):
         return body
+    if source.text_anchor:
+        anchor = re.search(source.text_anchor, body, re.IGNORECASE)
+        if anchor is None:
+            raise ConsolidationError(f"{source.slug} has no first article")
+        return body[anchor.start() :]
     first = _FIRST_ARTICLE.search(body)
     if first is None:
         raise ConsolidationError(f"{source.slug} has no first article")
@@ -261,7 +295,12 @@ def split_parts(source: RuleSource, text: str) -> dict[str, Part]:
         value = _normalise_text(
             _before_structural_heading(text[match.start() : end])
         ).strip()
-        label = _label(match["heading"])
+        ordinal = _DISPOSITION_WORD.match(match["heading"])
+        label = (
+            _disposition_label(ordinal, text[: match.start()])
+            if ordinal
+            else _label(match["heading"])
+        )
         note = _SPIJ_NOTE.search(value)
         if note is None:
             if _SPIJ_MARKER.search(value):
@@ -336,6 +375,8 @@ def consolidate(
 
 
 def split_document(source: RuleSource, body: str) -> list[ServedPart]:
+    if source.body_label:
+        return _labelled_passages(source.body_label, body, _source_origin(source))
     if source.kind in ("reglamento", "condiciones"):
         return _expand_parts(
             ServedPart(part.label, part.text, part.origin)
@@ -646,8 +687,8 @@ async def sync(
                                                 pdf_url, pdf_key, pdf_sha256, body,
                                                 redacted_body, redactor_version,
                                                 source_sha256, build_sha256,
-                                                visitor_searchable)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                                visitor_searchable, sector)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                     ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title,
                         kind = EXCLUDED.kind, approved_by = EXCLUDED.approved_by,
                         text_date = EXCLUDED.text_date, pdf_url = EXCLUDED.pdf_url,
@@ -657,6 +698,7 @@ async def sync(
                         redactor_version = EXCLUDED.redactor_version,
                         source_sha256 = EXCLUDED.source_sha256,
                         visitor_searchable = EXCLUDED.visitor_searchable,
+                        sector = EXCLUDED.sector,
                         synced_at = now()
                     """,
                     source.slug,
@@ -673,6 +715,7 @@ async def sync(
                     _build_hash(source, [source]),
                     _build_hash(source, [source]),
                     source.visitor_searchable,
+                    source.sector,
                 )
             # A document whose text did not change still needs a redacted body
             # at the current version, and a modificatoria has no passages that

@@ -30,6 +30,7 @@ async def find_rules(
     min_similarity: float,
     min_text_rank: float = DEFAULT_MIN_TEXT_RANK,
     limit: int = MAX_RULES,
+    sector: str | None = None,
 ) -> list[Rule]:
     vector = await embedder.embed_query(query)
     async with pool.acquire() as connection:
@@ -50,6 +51,7 @@ async def find_rules(
               AND d.visitor_searchable
               AND p.search @@ q.query
               AND ts_rank(p.search, q.query) >= $3
+              AND ($5::text IS NULL OR d.sector = $5)
             ORDER BY p.embedding <=> $1::vector, p.document_slug, p.ordinal
             LIMIT $4
             """,
@@ -57,6 +59,7 @@ async def find_rules(
             query,
             min_text_rank,
             limit,
+            sector,
         )
     return [
         Rule(

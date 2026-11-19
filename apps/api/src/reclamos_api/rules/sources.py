@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
+from reclamos_api.corpus.sources import Sector
+
 Kind = Literal[
     "precedente", "lineamiento", "reglamento", "condiciones", "modificatoria"
 ]
@@ -28,6 +30,9 @@ class RuleSource:
     expediente: str | None = None
     visitor_searchable: bool = True
     gazette: bool = False
+    text_anchor: str | None = None
+    body_label: str | None = None
+    sector: Sector = "telecom"
 
 
 SOURCES = (
@@ -181,5 +186,61 @@ SOURCES = (
         "https://www.osiptel.gob.pe/media/dgdg0b4z/expedienten%C2%BA-07837-2003-trasu-gus-rqj-queja.pdf",
         expediente="07837-2003/TRASU/GUS-RQJ",
         gazette=True,
+    ),
+    RuleSource(
+        "reclamos-electricidad-gas-2014",
+        "Procedimiento Administrativo de Reclamos de los Usuarios de los "
+        "Servicios Públicos de Electricidad y Gas Natural",
+        "reglamento",
+        "Res. 269-2014-OS/CD",
+        date(2014, 12, 29),
+        "https://www.osinergmin.gob.pe/seccion/centro_documental/PlantillaMarcoLegalBusqueda/OSINERGMIN%20No.269-2014-OS-CD.pdf",
+        effective_on=date(2015, 5, 23),
+        text_anchor=r"art.culo\s+1\s*\.\-\s*objetivo",
+        sector="energy",
+    ),
+    # Res. 014-2025-OS/CD changes numerals inside articles 2 and 39 and Anexo I,
+    # which article-level consolidation cannot merge without losing the rest of
+    # each article. It stays recorded and is not applied.
+    RuleSource(
+        "reclamos-electricidad-gas-014-2025",
+        "Modificación de la Directiva de Reclamos",
+        "modificatoria",
+        "Res. 014-2025-OS/CD",
+        date(2025, 2, 6),
+        "https://cdn.www.gob.pe/uploads/document/file/8630527/7148393-resolucion-de-consejo-directivo-organismo-supervisor-de-la-inversion-en-energia-y-mineria-osinergmin-n-014-2025-os-cd.pdf",
+        base_slug="reclamos-electricidad-gas-2014",
+        effective_on=date(2025, 2, 7),
+        sector="energy",
+    ),
+    RuleSource(
+        "lineamientos-jaru-i",
+        "Lineamientos resolutivos de la JARU, parte I",
+        "lineamiento",
+        "JARU, Sala Plena",
+        date(2025, 4, 23),
+        "https://cdn.www.gob.pe/uploads/document/file/7977495/6707803-parte-i-de-los-lineamientos-resolutivos-de-la-jaru.pdf",
+        body_label="Lineamiento",
+        sector="energy",
+    ),
+    RuleSource(
+        "lineamientos-jaru-ii",
+        "Lineamientos resolutivos de la JARU, parte II",
+        "lineamiento",
+        "JARU, Sala Plena",
+        date(2025, 4, 23),
+        "https://cdn.www.gob.pe/uploads/document/file/7977496/6707803-parte-ii-de-los-lineamientos-resolutivos-de-la-jaru.pdf",
+        body_label="Lineamiento",
+        sector="energy",
+    ),
+    RuleSource(
+        "precedentes-jaru",
+        "Compendio de precedentes de observancia obligatoria de la JARU",
+        "precedente",
+        "JARU",
+        date(2024, 12, 18),
+        "https://cdn.www.gob.pe/uploads/document/file/7389465/6301997-jaru-compendio-precedentes.pdf",
+        body_label="Precedente",
+        sector="energy",
     ),
 )

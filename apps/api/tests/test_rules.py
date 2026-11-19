@@ -205,6 +205,33 @@ de pago materia de reclamo.""",
     assert "tarjeta de pago" in part.text
 
 
+def test_split_document_keeps_a_secretaria_tecnica_sentence() -> None:
+    [part] = split_document(
+        BASE,
+        """Artículo 1.- Plazo
+La Secretaría Técnica del Tribunal remitirá el expediente en 3 días.
+Segundo párrafo.""",
+    )
+
+    assert "Secretaría Técnica del Tribunal remitirá el expediente" in part.text
+    assert "Segundo párrafo" in part.text
+
+
+def test_split_document_removes_the_spij_footer() -> None:
+    [part] = split_document(
+        BASE,
+        """Artículo 1.- Plazo
+La empresa contesta en 3 días.
+Secretaría Técnica de Órganos Resolutivos    34
+Actualizado al: 24/09/15
+Fuente: SPIJ""",
+    )
+
+    assert "Secretaría" not in part.text
+    assert "Fuente" not in part.text
+    assert "contesta en 3 días" in part.text
+
+
 def test_split_document_removes_digital_signature_stamps() -> None:
     precedent = RuleSource(
         "precedent-stamp",
