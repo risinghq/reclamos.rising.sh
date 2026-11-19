@@ -71,9 +71,10 @@ export function App() {
       <header className={styles.intro}>
         <h1 className="text-h1 text-balance">Casos parecidos a tu reclamo</h1>
         <p className={`text-prose ${styles.lead}`}>
-          Cuenta tu problema con tu empresa de telefonía, internet o cable. Te
-          mostramos resoluciones públicas del tribunal de OSIPTEL sobre casos
-          parecidos, con la cita de la resolución que respalda cada punto.
+          Cuenta tu problema con tu empresa de telefonía, internet o cable, o
+          con tu empresa de luz o gas. Te mostramos resoluciones públicas de los
+          tribunales de OSIPTEL y Osinergmin sobre casos parecidos, con la cita
+          de la resolución que respalda cada punto.
         </p>
       </header>
 
@@ -186,6 +187,12 @@ function Results({
         {response.brands.length > 0 && (
           <p className={`text-13 ${styles.brands}`}>
             Primero, casos con {BRAND_LIST.format(response.brands)}.
+          </p>
+        )}
+        {response.sector === "energy" && (
+          <p className={`text-13 ${styles.brands}`}>
+            Estos casos son de Osinergmin (electricidad y gas). Las estadísticas
+            de resultados solo cubren casos de telecomunicaciones.
           </p>
         )}
       </header>

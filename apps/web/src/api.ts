@@ -9,9 +9,12 @@ export type CardField =
   | "evidence"
   | "orders";
 
+export type Sector = "telecom" | "energy";
+
 export type FoundCase = {
   resolution_id: number;
   expediente: string;
+  sector: Sector;
   number: string | null;
   date: string | null;
   operator: string | null;
@@ -74,6 +77,7 @@ export type FoundRule = {
 export type CasesResponse = {
   query: string;
   outcome: "found" | "no_similar_case";
+  sector: Sector | null;
   brands: string[];
   outcomes: Record<string, number>;
   cases: FoundCase[];

@@ -14,6 +14,7 @@ import { App } from "./App";
 const CASE: FoundCase = {
   resolution_id: 4211,
   expediente: "1234-2024/TRASU",
+  sector: "telecom",
   number: "00321-2024-TRASU/OSIPTEL",
   date: "2024-03-18",
   operator: "AMERICA MOVIL PERU S.A.C.",
@@ -137,10 +138,20 @@ describe("search page", () => {
     expect(screen.getByText(/no es asesoría legal/i)).toBeInTheDocument();
   });
 
+  it("names the telecom and electricity and gas sectors", () => {
+    render(<App />);
+
+    const lead = screen.getByText(/resoluciones públicas/i);
+    expect(lead).toHaveTextContent("telefonía, internet o cable");
+    expect(lead).toHaveTextContent("luz o gas");
+    expect(lead).toHaveTextContent("OSIPTEL y Osinergmin");
+  });
+
   it("shows each case closed to its claim, one reason and one order, and opens the rest", async () => {
     const sent = answer(200, {
       query: "me cobran un plan",
       outcome: "found",
+      sector: "telecom",
       brands: ["Claro"],
       outcomes: { fundado: 1 },
       cases: [
@@ -214,6 +225,7 @@ describe("search page", () => {
     answer(200, {
       query: "me cobran el cargo fijo",
       outcome: "found",
+      sector: "telecom",
       brands: [],
       outcomes: { fundado: 2 },
       cases: [
@@ -261,6 +273,7 @@ describe("search page", () => {
         answer(200, {
           query: "x",
           outcome: "no_similar_case",
+          sector: null,
           brands: [],
           outcomes: {},
           cases: [],

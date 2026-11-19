@@ -39,6 +39,15 @@ export function outcomeLabel(outcome: string | null): string {
   return (outcome && OUTCOMES[outcome]) ?? "Resultado sin leer";
 }
 
+const SECTORS: Record<string, string> = {
+  telecom: "Telecomunicaciones",
+  energy: "Electricidad y gas",
+};
+
+export function sectorLabel(sector: string): string {
+  return SECTORS[sector] ?? sector;
+}
+
 export const CARD_FIELDS: [CardField, string][] = [
   ["claim", "Qué reclamó el usuario"],
   ["operator_position", "Qué respondió la empresa"],

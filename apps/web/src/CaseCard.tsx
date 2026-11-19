@@ -6,7 +6,13 @@ import { TextLink } from "@gitbutler/but-ui-react/TextLink.tsx";
 import { useId, useState } from "react";
 import type { CardPoint, FoundCase } from "./api";
 import styles from "./CaseCard.module.css";
-import { CARD_FIELDS, dateLabel, outcomeBadge, outcomeLabel } from "./labels";
+import {
+  CARD_FIELDS,
+  dateLabel,
+  outcomeBadge,
+  outcomeLabel,
+  sectorLabel,
+} from "./labels";
 import { Statistics } from "./Statistics";
 
 type Field = { name: string; title: string; points: CardPoint[] };
@@ -50,6 +56,7 @@ export function CaseCard({ found }: { found: FoundCase }) {
           {claim ? claim.text : reference}
         </h3>
         <div className={`text-12 ${styles.meta}`}>
+          <MetaPart icon="tag">{sectorLabel(found.sector)}</MetaPart>
           {found.operator && (
             <MetaPart icon="globe">
               {found.brand
