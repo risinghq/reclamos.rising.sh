@@ -14,6 +14,7 @@ from reclamos_api.config import Settings
 from reclamos_api.corpus import repository
 from reclamos_api.corpus.extract import missing_tools
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
+from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import USER_AGENT, Fetcher, ListedResolution
 from reclamos_api.corpus.store import LocalStore
 from reclamos_api.db import database_pool
@@ -91,7 +92,9 @@ def run_jobs(
                 await seed(pool, store)
             queue = Queue(pool, name=QUEUE_NAME, schema=settings.queue_schema)
             fetcher = recorded_fetcher(site)
-            pipeline = Pipeline(pool, queue, store, fetcher, HashingEmbedder())
+            pipeline = Pipeline(
+                pool, queue, store, fetcher, HashingEmbedder(), Redactor.without_ner()
+            )
             pipeline.register()
             await pipeline.enqueue_unfinished()
             await Worker(queue, worker_id="test").drain()
@@ -311,6 +314,7 @@ def test_stats_of_an_empty_corpus(
         "resolutions found       0",
         "downloaded              0",
         "extracted               0",
+        "redacted                0",
         "parsed                  0",
         "chunked                 0  (0 chunks)",
         "embedded                0",

@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from fakeembed import HashingEmbedder
+from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.store import LocalStore
 from reclamos_api.db import database_pool
 from reclamos_api.rules.sources import Changes, RuleSource
@@ -367,6 +368,7 @@ def test_rules_sync_consolidates_and_embeds_current_articles(
                 pool,
                 LocalStore(tmp_path / "pdfs"),
                 embedder,
+                Redactor.without_ner(),
                 sources=(BASE, AMENDMENT),
                 download=download,
             )
@@ -374,6 +376,7 @@ def test_rules_sync_consolidates_and_embeds_current_articles(
                 pool,
                 LocalStore(tmp_path / "pdfs"),
                 embedder,
+                Redactor.without_ner(),
                 sources=(BASE, AMENDMENT),
                 download=download,
             )

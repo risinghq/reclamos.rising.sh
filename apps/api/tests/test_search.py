@@ -15,6 +15,7 @@ from reclamos_api.config import Settings
 from reclamos_api.corpus import repository
 from reclamos_api.corpus.chunk import chunk_text
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
+from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import Fetcher, ListedResolution
 from reclamos_api.corpus.store import LocalStore
 from reclamos_api.db import database_pool
@@ -94,7 +95,12 @@ async def seed_and_run(
             transport=httpx.MockTransport(lambda request: httpx.Response(500)),
         )
         pipeline = Pipeline(
-            cast("asyncpg.Pool", counted), queue, LocalStore(pdfs), fetcher, embedder
+            cast("asyncpg.Pool", counted),
+            queue,
+            LocalStore(pdfs),
+            fetcher,
+            embedder,
+            Redactor.without_ner(),
         )
         pipeline.register()
         await pipeline.enqueue_unfinished()
@@ -149,11 +155,14 @@ def test_chunk_and_embed_jobs_store_quotable_chunks_for_every_parsed_resolution(
         assert len(chunks) > 3
         assert [c["ordinal"] for c in chunks] == list(range(len(chunks)))
         for chunk in chunks:
-            assert row["body"][chunk["char_start"] : chunk["char_end"]] == chunk["text"]
-            assert chunk["embedding"] is not None
-            assert chunk["page_start"] == 1 + row["body"][: chunk["char_start"]].count(
-                "\f"
+            assert (
+                row["redacted_body"][chunk["char_start"] : chunk["char_end"]]
+                == chunk["text"]
             )
+            assert chunk["embedding"] is not None
+            assert chunk["page_start"] == 1 + row["redacted_body"][
+                : chunk["char_start"]
+            ].count("\f")
 
 
 def test_embedding_holds_no_database_connection_while_the_model_runs(
@@ -211,10 +220,12 @@ def test_search_returns_ranked_chunks_with_what_a_citation_needs(
     scores = [r["score"] for r in results]
     assert scores == sorted(scores, reverse=True)
 
-    body = query(
-        indexed, "SELECT body FROM resolutions WHERE id = $1", top["resolution_id"]
-    )[0]["body"]
-    assert body[top["char_start"] : top["char_end"]] == top["text"]
+    text = query(
+        indexed,
+        "SELECT redacted_body FROM resolutions WHERE id = $1",
+        top["resolution_id"],
+    )[0]["redacted_body"]
+    assert text[top["char_start"] : top["char_end"]] == top["text"]
     assert top["page_start"] <= top["page_end"]
 
 
