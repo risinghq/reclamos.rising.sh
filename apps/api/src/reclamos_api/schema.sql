@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS resolutions (
     chunked_at timestamptz,
     embedded_at timestamptz,
 
+    sector text NOT NULL DEFAULT 'telecom' CHECK (sector IN ('telecom', 'energy')),
+    -- A listed entry that is not a user complaint resolution (a Cuerpo
+    -- Colegiado or Tribunal de Solución de Controversias resolution): the row
+    -- records the skip and never enters the pipeline.
+    skipped_reason text,
+
     failure_stage text CHECK (
         failure_stage IN ('download', 'extract', 'redact', 'parse', 'chunk', 'embed')
     ),
@@ -67,13 +73,35 @@ WHERE expediente ~* '^expediente';
 -- A listing window that discovery cannot read in full: one day with more
 -- entries than a page shows. A later complete listing of the window deletes it.
 CREATE TABLE IF NOT EXISTS listing_failures (
+    source text NOT NULL,
     start_date date NOT NULL,
     end_date date NOT NULL,
     reason text NOT NULL,
     detail text NOT NULL,
     failed_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (start_date, end_date)
+    PRIMARY KEY (source, start_date, end_date)
 );
+
+ALTER TABLE listing_failures ADD COLUMN IF NOT EXISTS source text;
+UPDATE listing_failures SET source = 'osiptel' WHERE source IS NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indrelid
+        JOIN pg_attribute a
+          ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+        WHERE c.relname = 'listing_failures'
+            AND i.indisprimary
+            AND a.attname = 'source'
+    ) THEN
+        ALTER TABLE listing_failures
+            DROP CONSTRAINT IF EXISTS listing_failures_pkey;
+        ALTER TABLE listing_failures
+            ADD PRIMARY KEY (source, start_date, end_date);
+    END IF;
+END $$;
 
 -- A passage of a resolution's body: body[char_start:char_end], on pages
 -- page_start to page_end (1-based). `search` indexes the text for full-text
@@ -105,11 +133,44 @@ CREATE TABLE IF NOT EXISTS embedding_model (
 CREATE INDEX IF NOT EXISTS chunks_search_idx ON chunks USING gin (search);
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx
     ON chunks USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX IF NOT EXISTS resolutions_filter_idx
-    ON resolutions (claim_type, outcome, resolved_on);
-
 ALTER TABLE resolutions
     ADD COLUMN IF NOT EXISTS is_precedent boolean NOT NULL DEFAULT false;
+
+ALTER TABLE resolutions
+    ADD COLUMN IF NOT EXISTS sector text NOT NULL DEFAULT 'telecom',
+    ADD COLUMN IF NOT EXISTS skipped_reason text;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'resolutions_sector_check'
+    ) THEN
+        ALTER TABLE resolutions
+            ADD CONSTRAINT resolutions_sector_check
+            CHECK (sector IN ('telecom', 'energy'));
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        WHERE c.relname = 'resolutions_filter_idx'
+            AND c.relkind = 'i'
+            AND NOT EXISTS (
+                SELECT 1 FROM pg_attribute a
+                WHERE a.attrelid = i.indrelid
+                    AND a.attnum = ANY (i.indkey)
+                    AND a.attname = 'sector'
+            )
+    ) THEN
+        DROP INDEX resolutions_filter_idx;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS resolutions_filter_idx
+    ON resolutions (sector, claim_type, outcome, resolved_on);
 
 -- `body` keeps the extracted source. `redacted_body` is what chunks, cards
 -- and exports are built from; `redactor_version` marks the redactor that
@@ -119,12 +180,20 @@ ALTER TABLE resolutions
     ADD COLUMN IF NOT EXISTS redactor_version text,
     ADD COLUMN IF NOT EXISTS redacted_at timestamptz;
 
-ALTER TABLE resolutions
-    DROP CONSTRAINT IF EXISTS resolutions_failure_stage_check;
-ALTER TABLE resolutions
-    ADD CONSTRAINT resolutions_failure_stage_check CHECK (
-        failure_stage IN ('download', 'extract', 'redact', 'parse', 'chunk', 'embed')
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'resolutions_failure_stage_check'
+    ) THEN
+        ALTER TABLE resolutions
+            ADD CONSTRAINT resolutions_failure_stage_check CHECK (
+                failure_stage IN (
+                    'download', 'extract', 'redact', 'parse', 'chunk', 'embed'
+                )
+            );
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS rule_documents (
     slug text PRIMARY KEY,
@@ -153,6 +222,9 @@ ALTER TABLE rule_documents
 ALTER TABLE rule_documents
     ADD COLUMN IF NOT EXISTS redacted_body text,
     ADD COLUMN IF NOT EXISTS redactor_version text;
+
+ALTER TABLE rule_documents
+    ADD COLUMN IF NOT EXISTS sector text NOT NULL DEFAULT 'telecom';
 
 CREATE TABLE IF NOT EXISTS rule_passages (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

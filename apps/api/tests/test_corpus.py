@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -12,10 +13,12 @@ from gobpe import FIXTURES, LISTED_IDS, RECORDED_IDS, RecordedSite
 from reclamos_api import cli
 from reclamos_api.config import Settings
 from reclamos_api.corpus import repository
+from reclamos_api.corpus.export import export_dataset
 from reclamos_api.corpus.extract import missing_tools
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
 from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import USER_AGENT, Fetcher, ListedResolution
+from reclamos_api.corpus.sources import OSIPTEL
 from reclamos_api.corpus.store import LocalStore
 from reclamos_api.db import database_pool
 from rqueue import Queue, Worker  # pyright: ignore[reportMissingTypeStubs]
@@ -116,7 +119,7 @@ async def seed_downloaded(
             expediente="Expediente N.° 0000123-2024/TRASU/ST-RA",
             published_on=date(2024, 3, 6),
         )
-        await repository.upsert_listed(connection, [listed])
+        await repository.upsert_listed(connection, OSIPTEL, [listed])
         await repository.record_download(
             connection,
             resolution_id,
@@ -172,17 +175,19 @@ def test_crawl_ingests_the_recorded_site_and_a_rerun_skips_finished_work(
 
     printed = first_output.splitlines()
     for line in (
-        "resolutions found       8",
-        "downloaded              3",
-        "parsed                  3",
-        "embedded                3",
-        "failed                  5",
-        stat("  download: page_http_404", 5),
-        stat("  billing", 1),
-        stat("  unrequested_contract", 1),
-        stat("  procedural", 1),
-        stat("  infundado", 2),
-        stat("  improcedente", 1),
+        "sector: telecom",
+        "  found                 8",
+        "  downloaded            3",
+        "  parsed                3",
+        "  embedded              3",
+        "  failed                5",
+        stat("    download: page_http_404", 5),
+        "  " + stat("  billing", 1),
+        "  " + stat("  unrequested_contract", 1),
+        "  " + stat("  procedural", 1),
+        "  " + stat("  infundado", 2),
+        "  " + stat("  improcedente", 1),
+        "sector: energy",
     ):
         assert line in printed, line
 
@@ -246,6 +251,7 @@ def test_a_wide_window_is_split_until_the_listing_is_complete(
         (r.url.params["filter[start_date]"], r.url.params["filter[end_date]"])
         for r in site.requests
         if "filter[start_date]" in r.url.params
+        and r.url.path == OSIPTEL.collection_url.removeprefix("https://www.gob.pe")
     ]
     assert windows[0] == ("2022-01-01", "2022-12-31")
     assert len(windows) > 3
@@ -285,7 +291,13 @@ def test_a_day_with_more_entries_than_a_page_is_recorded_as_a_failed_listing(
     assert "listing windows that could not be read" in output
     # The window is final: the job finished instead of failing and retrying.
     assert query(environment, "SELECT 1 FROM resolutions") == []
-    assert len([r for r in site.requests if "filter[start_date]" in r.url.params]) == 1
+    osiptel_requests = [
+        r
+        for r in site.requests
+        if "filter[start_date]" in r.url.params
+        and r.url.path == OSIPTEL.collection_url.removeprefix("https://www.gob.pe")
+    ]
+    assert len(osiptel_requests) == 1
 
     # A later crawl that lists the day in full clears the failure.
     def listing_only(request: httpx.Request) -> httpx.Response:
@@ -310,19 +322,25 @@ def test_stats_of_an_empty_corpus(
 ) -> None:
     crawl_main(["corpus", "stats"])
 
+    empty_sector = [
+        "  found                 0",
+        "  downloaded            0",
+        "  extracted             0",
+        "  redacted              0",
+        "  parsed                0",
+        "  chunked               0  (0 chunks)",
+        "  embedded              0",
+        "  failed                0",
+        "  claim types",
+        "    none",
+        "  outcomes",
+        "    none",
+    ]
     assert capsys.readouterr().out.splitlines() == [
-        "resolutions found       0",
-        "downloaded              0",
-        "extracted               0",
-        "redacted                0",
-        "parsed                  0",
-        "chunked                 0  (0 chunks)",
-        "embedded                0",
-        "failed                  0",
-        "claim types",
-        "  none",
-        "outcomes",
-        "  none",
+        "sector: telecom",
+        *empty_sector,
+        "sector: energy",
+        *empty_sector,
     ]
 
 
@@ -378,7 +396,7 @@ def test_a_resolution_that_cannot_be_parsed_keeps_its_text_and_the_reason(
     )
 
     crawl_main(["corpus", "stats"])
-    assert stat("  parse: no_date", 1) in capsys.readouterr().out.splitlines()
+    assert stat("    parse: no_date", 1) in capsys.readouterr().out.splitlines()
 
 
 @pytest.mark.skipif(
@@ -398,3 +416,20 @@ def test_a_file_that_is_not_a_pdf_fails_extraction_with_a_reason(
         "extract",
         "unreadable_pdf",
     )
+
+
+@pytest.mark.skipif(
+    bool(missing_tools(ocr=False)), reason=f"needs {missing_tools(ocr=False)}"
+)
+def test_export_writes_each_resolutions_sector(
+    environment: Settings, tmp_path: Path
+) -> None:
+    async def seed(pool: Any, store: LocalStore) -> None:
+        await seed_downloaded(pool, store, 104, text_pdf(RESOLUTION_LINES))
+
+    run_jobs(environment, seed)
+
+    asyncio.run(export_dataset(environment, tmp_path))
+
+    [line] = (tmp_path / "resolutions.jsonl").read_text().strip().splitlines()
+    assert json.loads(line)["sector"] == "telecom"

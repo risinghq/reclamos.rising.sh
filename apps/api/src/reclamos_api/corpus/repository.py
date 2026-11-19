@@ -6,23 +6,37 @@ from reclamos_api.corpus.chunk import Chunk
 from reclamos_api.corpus.parse import Parsed
 from reclamos_api.corpus.redact import REDACTOR_VERSION
 from reclamos_api.corpus.site import ListedResolution
+from reclamos_api.corpus.sources import Source
 
 Connection = Any
 
 
 async def upsert_listed(
-    connection: Connection, items: Sequence[ListedResolution]
+    connection: Connection, source: Source, items: Sequence[ListedResolution]
 ) -> None:
     await connection.executemany(
         """
-        INSERT INTO resolutions (id, page_url, expediente, published_on)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO resolutions
+            (id, page_url, expediente, published_on, sector, skipped_reason)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (id) DO UPDATE
         SET page_url = EXCLUDED.page_url,
             expediente = EXCLUDED.expediente,
-            published_on = EXCLUDED.published_on
+            published_on = EXCLUDED.published_on,
+            sector = EXCLUDED.sector,
+            skipped_reason = EXCLUDED.skipped_reason
         """,
-        [(i.id, i.page_url, i.expediente, i.published_on) for i in items],
+        [
+            (
+                i.id,
+                i.page_url,
+                source.keep(i.expediente),
+                i.published_on,
+                source.sector,
+                source.skip(i.expediente),
+            )
+            for i in items
+        ],
     )
 
 
@@ -33,7 +47,10 @@ async def get(connection: Connection, resolution_id: int) -> Any:
 
 
 def next_stage(row: Any) -> str | None:
-    """The first stage a resolution has not finished, or None when all are."""
+    """The first stage a resolution has not finished, or None when all are.
+    A skipped entry never enters the pipeline."""
+    if row["skipped_reason"] is not None:
+        return None
     if row["downloaded_at"] is None:
         return "download"
     if row["extracted_at"] is None:
@@ -55,9 +72,10 @@ async def unfinished_ids(connection: Connection) -> list[int]:
     rows = await connection.fetch(
         """
         SELECT id FROM resolutions
-        WHERE downloaded_at IS NULL OR extracted_at IS NULL OR parsed_at IS NULL
+        WHERE skipped_reason IS NULL
+          AND (downloaded_at IS NULL OR extracted_at IS NULL OR parsed_at IS NULL
            OR chunked_at IS NULL OR embedded_at IS NULL OR redacted_at IS NULL
-           OR redactor_version IS DISTINCT FROM $1
+           OR redactor_version IS DISTINCT FROM $1)
         ORDER BY id
         """,
         REDACTOR_VERSION,
@@ -360,15 +378,22 @@ async def record_failure(
 
 
 async def record_listing_failure(
-    connection: Connection, start: date, end: date, *, reason: str, detail: str
+    connection: Connection,
+    source: str,
+    start: date,
+    end: date,
+    *,
+    reason: str,
+    detail: str,
 ) -> None:
     await connection.execute(
         """
-        INSERT INTO listing_failures (start_date, end_date, reason, detail)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (start_date, end_date) DO UPDATE
+        INSERT INTO listing_failures (source, start_date, end_date, reason, detail)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (source, start_date, end_date) DO UPDATE
         SET reason = EXCLUDED.reason, detail = EXCLUDED.detail, failed_at = now()
         """,
+        source,
         start,
         end,
         reason,
@@ -377,11 +402,15 @@ async def record_listing_failure(
 
 
 async def clear_listing_failures(
-    connection: Connection, start: date, end: date
+    connection: Connection, source: str, start: date, end: date
 ) -> None:
     """Forget the failures inside a window that has now been listed in full."""
     await connection.execute(
-        "DELETE FROM listing_failures WHERE start_date >= $1 AND end_date <= $2",
+        """
+        DELETE FROM listing_failures
+        WHERE source = $1 AND start_date >= $2 AND end_date <= $3
+        """,
+        source,
         start,
         end,
     )

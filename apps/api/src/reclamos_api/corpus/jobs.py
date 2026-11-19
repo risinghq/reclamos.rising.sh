@@ -18,6 +18,7 @@ from reclamos_api.corpus.site import (
     parse_resolution_page,
     split_window,
 )
+from reclamos_api.corpus.sources import SOURCE_BY_SLUG, SOURCES
 from reclamos_api.corpus.store import ObjectStore
 from reclamos_api.retrieval.embedder import Embedder
 from rqueue import Queue, TaskContext  # pyright: ignore[reportMissingTypeStubs]
@@ -86,7 +87,8 @@ class Pipeline:
 
     async def enqueue_discovery(self, start: date, end: date) -> None:
         async with self.pool.acquire() as connection:
-            await self._enqueue_discover(connection, start, end)
+            for source in SOURCES:
+                await self._enqueue_discover(connection, source.slug, start, end)
 
     async def enqueue_unfinished(self) -> int:
         async with self.pool.acquire() as connection:
@@ -97,12 +99,18 @@ class Pipeline:
                 )
         return len(ids)
 
-    async def _enqueue_discover(self, connection: Any, start: date, end: date) -> None:
+    async def _enqueue_discover(
+        self, connection: Any, source: str, start: date, end: date
+    ) -> None:
         await self.queue.enqueue(
             connection,
             task=DISCOVER,
-            payload={"start": start.isoformat(), "end": end.isoformat()},
-            dedupe_key=f"{DISCOVER}:{start}:{end}",
+            payload={
+                "source": source,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+            dedupe_key=f"{DISCOVER}:{source}:{start}:{end}",
             on_conflict="return_existing",
         )
 
@@ -120,11 +128,12 @@ class Pipeline:
 
     async def discover(self, payload: dict[str, str], context: TaskContext) -> None:
         del context
+        source = SOURCE_BY_SLUG[payload["source"]]
         start, end = (
             date.fromisoformat(payload["start"]),
             date.fromisoformat(payload["end"]),
         )
-        listing = await fetch_listing(self.fetcher, start, end)
+        listing = await fetch_listing(self.fetcher, source, start, end)
         async with self.pool.acquire() as connection, connection.transaction():
             if listing.total > len(listing.items):
                 if start == end:
@@ -132,6 +141,7 @@ class Pipeline:
                     # recorded as failed and the job is done.
                     await repository.record_listing_failure(
                         connection,
+                        source.slug,
                         start,
                         end,
                         reason="listing_truncated",
@@ -140,10 +150,12 @@ class Pipeline:
                     )
                     return
                 for window_start, window_end in split_window(start, end):
-                    await self._enqueue_discover(connection, window_start, window_end)
+                    await self._enqueue_discover(
+                        connection, source.slug, window_start, window_end
+                    )
                 return
-            await repository.clear_listing_failures(connection, start, end)
-            await repository.upsert_listed(connection, listing.items)
+            await repository.clear_listing_failures(connection, source.slug, start, end)
+            await repository.upsert_listed(connection, source, listing.items)
             for item in listing.items:
                 await self._advance(
                     connection, await repository.get(connection, item.id)
@@ -234,7 +246,11 @@ class Pipeline:
                 await repository.record_parse(
                     connection,
                     resolution_id,
-                    parse_resolution(row["body"], summary=row["summary"] or ""),
+                    parse_resolution(
+                        row["body"],
+                        summary=row["summary"] or "",
+                        sector=row["sector"],
+                    ),
                 )
 
     async def _redact(self, resolution_id: int) -> None:

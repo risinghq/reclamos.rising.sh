@@ -2,16 +2,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from reclamos_api.corpus.redact import LABELS, REDACTOR_VERSION
+from reclamos_api.corpus.sources import SECTORS
 
 
 @dataclass(frozen=True, slots=True)
-class CorpusStats:
+class SectorStats:
+    sector: str
     found: int
+    skipped: dict[str, int]
     downloaded: int
     extracted: int
     extraction_methods: dict[str, int]
     redacted: int
-    redaction_labels: dict[str, int]
     parsed: int
     chunked: int
     chunks: int
@@ -19,19 +21,27 @@ class CorpusStats:
     failures: dict[tuple[str, str], int]
     claim_types: dict[str, int]
     outcomes: dict[str, int]
-    failed_jobs: dict[str, int]
-    listing_failures: dict[str, int]
 
     @property
     def failed(self) -> int:
         return sum(self.failures.values())
 
 
+@dataclass(frozen=True, slots=True)
+class CorpusStats:
+    sectors: dict[str, SectorStats]
+    redaction_labels: dict[str, int]
+    failed_jobs: dict[str, int]
+    listing_failures: dict[str, int]
+
+
 async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
     async with pool.acquire() as connection:
-        totals = await connection.fetchrow(
+        totals = await connection.fetch(
             """
-            SELECT count(*) AS found,
+            SELECT sector,
+                   count(*) AS found,
+                   count(skipped_reason) FILTER (WHERE skipped_reason IS NOT NULL) AS skipped,
                    count(downloaded_at) AS downloaded,
                    count(extracted_at) AS extracted,
                    count(redacted_at) FILTER (
@@ -40,9 +50,15 @@ async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
                    count(parsed_at) AS parsed,
                    count(chunked_at) AS chunked,
                    count(embedded_at) AS embedded
-            FROM resolutions
+            FROM resolutions GROUP BY sector
             """,
             REDACTOR_VERSION,
+        )
+        skipped = await connection.fetch(
+            """
+            SELECT sector, skipped_reason, count(*) FROM resolutions
+            WHERE skipped_reason IS NOT NULL GROUP BY 1, 2
+            """
         )
         label_rows = await connection.fetch(
             "SELECT label, sum(n) AS n FROM ("
@@ -53,24 +69,35 @@ async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
             )
             + ") counts GROUP BY label"
         )
-        chunks = await connection.fetchval("SELECT count(*) FROM chunks")
+        chunks = await connection.fetch(
+            """
+            SELECT r.sector, count(*) FROM chunks c
+            JOIN resolutions r ON r.id = c.resolution_id GROUP BY 1
+            """
+        )
         methods = await connection.fetch(
             """
-            SELECT text_method, count(*) FROM resolutions
-            WHERE text_method IS NOT NULL GROUP BY 1
+            SELECT sector, text_method, count(*) FROM resolutions
+            WHERE text_method IS NOT NULL GROUP BY 1, 2
             """
         )
         failures = await connection.fetch(
             """
-            SELECT failure_stage, failure_reason, count(*) FROM resolutions
-            WHERE failure_reason IS NOT NULL GROUP BY 1, 2
+            SELECT sector, failure_stage, failure_reason, count(*) FROM resolutions
+            WHERE failure_reason IS NOT NULL GROUP BY 1, 2, 3
             """
         )
         claim_types = await connection.fetch(
-            "SELECT claim_type, count(*) FROM resolutions WHERE parsed_at IS NOT NULL GROUP BY 1"
+            """
+            SELECT sector, claim_type, count(*) FROM resolutions
+            WHERE parsed_at IS NOT NULL GROUP BY 1, 2
+            """
         )
         outcomes = await connection.fetch(
-            "SELECT outcome, count(*) FROM resolutions WHERE parsed_at IS NOT NULL GROUP BY 1"
+            """
+            SELECT sector, outcome, count(*) FROM resolutions
+            WHERE parsed_at IS NOT NULL GROUP BY 1, 2
+            """
         )
         # The queue schema name is validated by rqueue before it is installed.
         failed_jobs = await connection.fetch(
@@ -80,44 +107,68 @@ async def collect_stats(pool: Any, *, queue_schema: str) -> CorpusStats:
         listing_failures = await connection.fetch(
             "SELECT reason, count(*) FROM listing_failures GROUP BY 1"
         )
+
+    sectors: dict[str, SectorStats] = {}
+    totals_by = {row[0]: row for row in totals}
+    chunk_counts = {row[0]: row[1] for row in chunks}
+    for sector in SECTORS:
+        row = totals_by.get(sector, {})
+        sectors[sector] = SectorStats(
+            sector=sector,
+            found=row.get("found", 0),
+            skipped={r[1]: r[2] for r in skipped if r[0] == sector},
+            downloaded=row.get("downloaded", 0),
+            extracted=row.get("extracted", 0),
+            extraction_methods={r[1]: r[2] for r in methods if r[0] == sector},
+            redacted=row.get("redacted", 0),
+            parsed=row.get("parsed", 0),
+            chunked=row.get("chunked", 0),
+            chunks=chunk_counts.get(sector, 0),
+            embedded=row.get("embedded", 0),
+            failures={(r[1], r[2]): r[3] for r in failures if r[0] == sector},
+            claim_types={r[1]: r[2] for r in claim_types if r[0] == sector},
+            outcomes={r[1]: r[2] for r in outcomes if r[0] == sector},
+        )
     return CorpusStats(
-        found=totals["found"],
-        downloaded=totals["downloaded"],
-        extracted=totals["extracted"],
-        extraction_methods={row[0]: row[1] for row in methods},
-        redacted=totals["redacted"],
+        sectors=sectors,
         redaction_labels={row["label"]: row["n"] for row in label_rows},
-        parsed=totals["parsed"],
-        chunked=totals["chunked"],
-        chunks=chunks,
-        embedded=totals["embedded"],
-        failures={(row[0], row[1]): row[2] for row in failures},
-        claim_types={row[0]: row[1] for row in claim_types},
-        outcomes={row[0]: row[1] for row in outcomes},
         failed_jobs={row[0]: row[1] for row in failed_jobs},
         listing_failures={row[0]: row[1] for row in listing_failures},
     )
 
 
 def format_stats(stats: CorpusStats) -> str:
-    lines = [
-        f"resolutions found       {stats.found}",
-        f"downloaded              {stats.downloaded}",
-        f"extracted               {stats.extracted}"
-        + _breakdown(stats.extraction_methods),
-        f"redacted                {stats.redacted}"
-        + _breakdown({LABELS[k]: v for k, v in stats.redaction_labels.items()}),
-        f"parsed                  {stats.parsed}",
-        f"chunked                 {stats.chunked}  ({stats.chunks} chunks)",
-        f"embedded                {stats.embedded}",
-        f"failed                  {stats.failed}",
-    ]
-    for (stage, reason), count in sorted(stats.failures.items()):
-        lines.append(f"  {stage}: {reason}".ljust(26) + str(count))
-    lines.append("claim types")
-    lines.extend(_counts(stats.claim_types))
-    lines.append("outcomes")
-    lines.extend(_counts(stats.outcomes))
+    lines: list[str] = []
+    for sector in SECTORS:
+        part = stats.sectors.get(sector)
+        if part is None:
+            continue
+        lines.append(f"sector: {sector}")
+        lines.append(f"  found                 {part.found}")
+        if part.skipped:
+            lines.append(f"  skipped               {sum(part.skipped.values())}")
+            lines.extend("  " + line for line in _counts(part.skipped))
+        lines.extend(
+            [
+                f"  downloaded            {part.downloaded}",
+                f"  extracted             {part.extracted}"
+                + _breakdown(part.extraction_methods),
+                f"  redacted              {part.redacted}",
+                f"  parsed                {part.parsed}",
+                f"  chunked               {part.chunked}  ({part.chunks} chunks)",
+                f"  embedded              {part.embedded}",
+                f"  failed                {part.failed}",
+            ]
+        )
+        for (stage, reason), count in sorted(part.failures.items()):
+            lines.append(f"    {stage}: {reason}".ljust(26) + str(count))
+        lines.append("  claim types")
+        lines.extend("  " + line for line in _counts(part.claim_types))
+        lines.append("  outcomes")
+        lines.extend("  " + line for line in _counts(part.outcomes))
+    if stats.redaction_labels:
+        lines.append("redactions")
+        lines.extend(_counts({LABELS[k]: v for k, v in stats.redaction_labels.items()}))
     if stats.listing_failures:
         lines.append("listing windows that could not be read")
         lines.extend(_counts(stats.listing_failures))

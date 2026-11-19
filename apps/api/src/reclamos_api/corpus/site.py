@@ -1,4 +1,4 @@
-"""Access to the gob.pe pages that publish OSIPTEL's TRASU resolutions."""
+"""Access to the gob.pe pages that publish the corpus's resolutions."""
 
 import asyncio
 import json
@@ -11,11 +11,11 @@ from urllib.parse import urlencode, urljoin, urlsplit
 
 import httpx
 from reclamos_api.corpus.parse import MONTHS
+from reclamos_api.corpus.sources import Source
 from selectolax.lexbor import LexborHTMLParser
 
 USER_AGENT = "reclamos-corpus/0.1 (+https://github.com/risinghq/reclamos.rising.sh)"
 SITE = "https://www.gob.pe"
-COLLECTION_URL = f"{SITE}/institucion/osiptel/colecciones/52616-jurisprudencia"
 PAGE_SIZE = 100
 MAX_REDIRECTS = 5
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -207,16 +207,6 @@ class Fetcher:
         return response
 
 
-# A listing title is "Expediente N.° " before the expediente number, and older
-# titles repeat the word: "Expediente N.° Expediente 03779-2006/TRASU/GUS-RA".
-# schema.sql strips rows stored before with the same pattern.
-EXPEDIENTE_LABEL = re.compile(r"^(?:expediente\s*(?:n\.?\s*[°º]\s*)?)+", re.I)
-
-
-def bare_expediente(title: str) -> str:
-    return EXPEDIENTE_LABEL.sub("", title).strip()
-
-
 @dataclass(frozen=True, slots=True)
 class ListedResolution:
     id: int
@@ -246,7 +236,9 @@ def parse_spanish_date(text: str) -> date:
     )
 
 
-async def fetch_listing(fetcher: Fetcher, start: date, end: date) -> Listing:
+async def fetch_listing(
+    fetcher: Fetcher, source: Source, start: date, end: date
+) -> Listing:
     """List the compendium entries published from `start` to `end` inclusive.
 
     The form that filters by date answers an XHR with JavaScript that replaces
@@ -254,7 +246,7 @@ async def fetch_listing(fetcher: Fetcher, start: date, end: date) -> Listing:
     so a window with more than PAGE_SIZE entries has to be split by the caller.
     """
     response = await fetcher.get(
-        COLLECTION_URL,
+        source.collection_url,
         params={
             "filter[order]": "publication_asc",
             "filter[per_page]": str(PAGE_SIZE),
@@ -263,10 +255,10 @@ async def fetch_listing(fetcher: Fetcher, start: date, end: date) -> Listing:
         },
         xhr=True,
     )
-    return parse_listing(response.text)
+    return parse_listing(response.text, source)
 
 
-def parse_listing(javascript: str) -> Listing:
+def parse_listing(javascript: str, source: Source) -> Listing:
     # A JavaScript string may hold a raw tab, which strict JSON forbids. The
     # paginator markup of a long listing does.
     fragments = [
@@ -293,7 +285,7 @@ def parse_listing(javascript: str) -> Listing:
                 ListedResolution(
                     id=int(id_match.group(1)),
                     page_url=urljoin(SITE, href),
-                    expediente=bare_expediente(link.text(strip=True)),
+                    expediente=source.expediente(link.text(strip=True)),
                     published_on=parse_spanish_date(heading.text(strip=True)),
                 )
             )

@@ -4,9 +4,8 @@ from datetime import date
 
 import httpx
 import pytest
-from gobpe import FIXTURES, LISTED_IDS, PUBLISHED_ON, RecordedSite
+from gobpe import COLLECTION_URL, FIXTURES, LISTED_IDS, PUBLISHED_ON, RecordedSite
 from reclamos_api.corpus.site import (
-    COLLECTION_URL,
     USER_AGENT,
     Fetcher,
     FetchError,
@@ -16,6 +15,7 @@ from reclamos_api.corpus.site import (
     parse_resolution_page,
     split_window,
 )
+from reclamos_api.corpus.sources import OSIPTEL
 
 
 class FakeClock:
@@ -50,14 +50,14 @@ def test_a_raw_tab_inside_a_listing_string_does_not_hide_the_resolutions() -> No
         '"<nav>\t<a>1</a>\t</nav>")\n'
     )
 
-    listing = parse_listing(javascript)
+    listing = parse_listing(javascript, OSIPTEL)
 
     assert listing.total == 8
     assert sorted(item.id for item in listing.items) == sorted(LISTED_IDS)
 
 
 def test_the_listing_names_every_resolution() -> None:
-    listing = parse_listing((FIXTURES / "listing-2022.js").read_text())
+    listing = parse_listing((FIXTURES / "listing-2022.js").read_text(), OSIPTEL)
 
     assert listing.total == 8
     assert sorted(item.id for item in listing.items) == sorted(LISTED_IDS)
@@ -134,7 +134,7 @@ def test_requests_are_a_second_apart() -> None:
             await fetcher.aclose()
 
     async def fetcher_listing(fetcher: Fetcher) -> None:
-        await fetch_listing(fetcher, date(2022, 1, 1), date(2022, 12, 31))
+        await fetch_listing(fetcher, OSIPTEL, date(2022, 1, 1), date(2022, 12, 31))
 
     asyncio.run(scenario())
 

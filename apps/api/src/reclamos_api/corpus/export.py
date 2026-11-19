@@ -63,7 +63,7 @@ async def export_dataset(settings: Settings, directory: Path) -> str:
             )
         resolutions = await connection.fetch(
             """
-            SELECT id, page_url, expediente, published_on, summary,
+            SELECT id, page_url, sector, expediente, published_on, summary,
                    pdf_url, pdf_sha256, pdf_bytes, page_count, ocr_pages,
                    text_method, number, resolved_on, operator, subject,
                    claim_type, appeal_kind, outcome, is_precedent, redacted_body
@@ -115,6 +115,7 @@ def _resolution(row: Any) -> dict[str, Any]:
     return {
         "id": row["id"],
         "page_url": row["page_url"],
+        "sector": row["sector"],
         "expediente": row["expediente"],
         "published_on": _date(row["published_on"]),
         "summary": row["summary"],

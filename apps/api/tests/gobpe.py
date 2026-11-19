@@ -12,7 +12,14 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 import httpx
-from reclamos_api.corpus.site import COLLECTION_URL
+from reclamos_api.corpus.sources import OSINERGMIN, OSIPTEL
+
+COLLECTION_URL = OSIPTEL.collection_url
+
+EMPTY_LISTING = (
+    '$(".js-official-documents-search-count").html("0 resultados")\n'
+    '$(".js-official-documents-search-results").html("")'
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gobpe"
 RECORDED_IDS = (6134934, 6134935, 6134941)
@@ -44,6 +51,8 @@ class RecordedSite:
             return httpx.Response(403)
         if url.path == COLLECTION_URL.removeprefix("https://www.gob.pe"):
             return self._listing(parse_qs(url.query.decode()))
+        if url.path == OSINERGMIN.collection_url.removeprefix("https://www.gob.pe"):
+            return httpx.Response(200, text=EMPTY_LISTING)
         if url.host == "cdn.www.gob.pe":
             return self._recorded(url.path, "pdf", "application/pdf")
         return self._recorded(url.path, "html", "text/html")
@@ -54,11 +63,7 @@ class RecordedSite:
         end = date.fromisoformat(query["filter[end_date]"][0])
         if start <= PUBLISHED_ON <= end:
             return httpx.Response(200, text=(FIXTURES / "listing-2022.js").read_text())
-        return httpx.Response(
-            200,
-            text='$(".js-official-documents-search-count").html("0 resultados")\n'
-            '$(".js-official-documents-search-results").html("")',
-        )
+        return httpx.Response(200, text=EMPTY_LISTING)
 
     @staticmethod
     def _recorded(path: str, extension: str, content_type: str) -> httpx.Response:
