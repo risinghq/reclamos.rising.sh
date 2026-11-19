@@ -1,9 +1,9 @@
-"""Read what a TRASU resolution states from its text.
+"""Read what a TRASU or JARU resolution states from its text.
 
-Every resolution opens with the same block of labelled lines (expediente,
-resolution number, date, operator, subject, outcome). The text comes from OCR
-for scanned PDFs, so the patterns tolerate dropped accents, stray punctuation
-and misread characters in the labels.
+Every resolution opens with a block of labelled lines (expediente, resolution
+number, date, operator, subject, outcome); the labels differ by sector. The
+text comes from OCR for scanned PDFs, so the patterns tolerate dropped accents,
+stray punctuation and misread characters in the labels.
 """
 
 import re
@@ -13,6 +13,7 @@ from datetime import date
 from difflib import SequenceMatcher, get_close_matches
 
 HEADER_CHARS = 3500
+TAIL_CHARS = 8000
 
 MONTHS = {
     "enero": 1,
@@ -32,10 +33,12 @@ MONTHS = {
 
 # These labels end the value of the preceding field.
 _LABELS = (
-    r"RECLAMANTE|SERVICIO|EMPRESA\s+OPERADORA|MATERIA\s+RECLAMADA|"
+    r"RECLAMANTE|RECURRENTE|SERVICIO|EMPRESA(?:\s+(?:OPERADORA|DISTRIBUIDORA|"
+    r"CONCESIONARIA|LICENCIATARIA))?|CONCESIONARIA|MATERIAS?(?:\s+RECLAMADA)?|"
     r"CONCEPTOS?\s+(?:RECLAMADOS?|CUESTIONADOS?)|ESCRITO\s+DE\s+QUEJA|C.DIGO\s+DE\s+RECLAMO|"
     r"RESOLUCI.N\s+(?:IMPUGNADA|DE\s+(?:LA\s+)?EMPRESA|DEL\s+TRIBUNAL|DEL\s+TRASU)|"
-    r"SENTIDO\s+DE\s+LA\s+RESOLUCI.N|N.MERO\s+DE\s+(?:SERVICIO|RECLAMO)|"
+    r"SENTIDO\s+DE\s+LA\s+RESOLUCI.N|N.MERO\s+DE\s+(?:SERVICIO|RECLAMO|SUMINISTRO)|"
+    r"SUMINISTRO|UBICACI.N|MONTO|"
     r"CICLO\s+DE\s+FACTURACI.N|SUMILLA|"
     r"REFERENCIA|RECLAMO\s+EN\s+.{1,4}\s+INSTANCIA|VISTO|ANTECEDENTES"
 )
@@ -58,6 +61,112 @@ KNOWN_OPERATORS = (
     "VIETTEL PERU S.A.C.",
     "WIN NET - TELECOM S.A.C.",
     "WOW TEL S.A.C.",
+)
+
+# The electricity distributors, gas distributors and concessionaires a JARU
+# resolution names as `Empresa`. A renamed company stays two operators, as the
+# corpus keeps Telefónica and Integratel apart: JARU texts print both Enel
+# Distribución Perú and Pluz Energía Perú.
+ENERGY_OPERATORS = (
+    "LUZ DEL SUR S.A.A.",
+    "ENEL DISTRIBUCION PERU S.A.A.",
+    "PLUZ ENERGIA PERU S.A.A.",
+    "HIDRANDINA S.A.A.",
+    "ELECTRO CENTRO S.A.",
+    "ELECTRO NOROESTE S.A.",
+    "ELECTRO NORTE S.A.",
+    "ELECTRO ORIENTE S.A.",
+    "ELECTRO SUR ESTE S.A.",
+    "ELECTRO SUR S.A.",
+    "ELECTRO PUNO S.A.A.",
+    "ELECTRO UCAYALI S.A.",
+    "ELECTRO DUNAS S.A.A.",
+    "SOCIEDAD ELECTRICA DE AREQUIPA S.A.",
+    "ELECTROPERU S.A.",
+    "EMPRESA DE TRANSMISION ELECTRICA CENTRO NORTE S.A.",
+    "EMPRESA ELECTRICA DE PIURA S.A.",
+    "EMPRESA MUNICIPAL DE SERVICIO ELECTRICO DE YAULI S.A.",
+    "EMPRESA MUNICIPAL DE SERVICIOS ELECTRICOS UTCUBAMBA S.A.",
+    "ADINELSA S.A.",
+    "COELVISA S.A.",
+    "EDECANETE S.A.",
+    "EDEGEL S.A.A.",
+    "EDELSA S.A.",
+    "EGEMSA S.A.",
+    "EILHICHA S.A.",
+    "ELECTRO PANGOA S.A.",
+    "ELECTRO TOCACHE S.A.",
+    "GAS NATURAL DE LIMA Y CALLAO S.A.",
+    "GASES DEL PACIFICO S.A.C.",
+    "CONTUGAS S.A.C.",
+)
+
+_ENERGY_NUMBER = re.compile(
+    r"(\d{1,6})\s*-\s*(\d{4})\s*[- ]?\s*OS\s*/\s*JARU\s*[-\u2013/]\s*(S\w+)",
+    re.IGNORECASE,
+)
+# A JARU expediente is the twelve-digit file number.
+_ENERGY_EXPEDIENTE = re.compile(r"EXPEDIENTE\s*N?[°º.]?\s*(\d{12})", re.IGNORECASE)
+# The resolutive articles sit at the end of the resolution.
+_RULING_WORDS = re.compile(
+    r"\b(FUNDAD[OA]S?|INFUNDAD[OA]S?|IMPROCEDENTE|NUL[OA]S?|NULIDAD)\b", re.IGNORECASE
+)
+# A `NULA` sends the file back to the company without ruling on a claim, like
+# the Tribunal's `sin efecto`.
+_VERDICTS = {
+    "fundado": "fundado",
+    "fundada": "fundado",
+    "infundado": "infundado",
+    "infundada": "infundado",
+    "improcedente": "improcedente",
+    "nulo": "sin_efecto",
+    "nula": "sin_efecto",
+    "nulidad": "sin_efecto",
+}
+
+# What the `Materia` of a JARU resolution claims. The order puts the narrow,
+# unambiguous topics before the broad ones, as CLAIM_TYPES does.
+ENERGY_CLAIM_TYPES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("meter", ("medidor",)),
+    ("recupero", ("recupero",)),
+    (
+        "connection",
+        (
+            "conexion",
+            "acometida",
+            "suministro nuevo",
+            "nuevo suministro",
+            "punto de suministro",
+            "factibilidad",
+        ),
+    ),
+    (
+        "service_cut",
+        ("corte", "suspension", "reconexion", "baja del suministro"),
+    ),
+    (
+        "service_quality",
+        ("calidad", "tension", "voltaje", "interrupcion", "deficiencia del servicio"),
+    ),
+    (
+        "billing",
+        (
+            "factur",
+            "cobro",
+            "recibo",
+            "monto",
+            "deuda",
+            "pago",
+            "tarifa",
+            "cargo",
+            "saldo",
+        ),
+    ),
+    ("consumption", ("lectura", "consumo", "estimad")),
+    (
+        "contract_terms",
+        ("contrato", "condiciones contractuales", "clausula"),
+    ),
 )
 
 _NUMBER = re.compile(
@@ -159,7 +268,11 @@ class Parsed:
         return "missing: " + ", ".join(self.missing)
 
 
-def parse_resolution(body: str, *, summary: str = "") -> Parsed:
+def parse_resolution(
+    body: str, *, summary: str = "", sector: str = "telecom"
+) -> Parsed:
+    if sector == "energy":
+        return _parse_energy(body)
     header = body[:HEADER_CHARS]
     parsed = Parsed(
         number=_number(header),
@@ -191,14 +304,105 @@ def parse_resolution(body: str, *, summary: str = "") -> Parsed:
     return parsed
 
 
-def claim_type(subject: str, *, appeal_kind: str | None) -> str | None:
+def claim_type(
+    subject: str,
+    *,
+    appeal_kind: str | None,
+    types: tuple[tuple[str, tuple[str, ...]], ...] = CLAIM_TYPES,
+) -> str | None:
     if appeal_kind == "queja":
         return "procedural"
     text = _plain(subject).lower()
-    for name, keywords in CLAIM_TYPES:
+    for name, keywords in types:
         if any(re.search(rf"\b{keyword}", text) for keyword in keywords):
             return name
     return None
+
+
+def _parse_energy(body: str) -> Parsed:
+    """A JARU resolution's fields. Every JARU file is a user's appeal in
+    second instance, so the kind does not vary."""
+    header = body[:HEADER_CHARS]
+    parsed = Parsed(
+        number=_energy_number(header),
+        resolved_on=_date(header),
+        operator=_energy_operator(header),
+        appeal_kind="apelacion",
+    )
+    parsed.subject = _field(header, r"MATERIAS?")
+    parsed.subject = _squash(parsed.subject) if parsed.subject else None
+    parsed.outcome = _energy_outcome(body)
+    parsed.claim_type = claim_type(
+        parsed.subject or "", appeal_kind="apelacion", types=ENERGY_CLAIM_TYPES
+    )
+    if parsed.claim_type is None and (
+        parsed.outcome == "sin_efecto"
+        or re.search(r"\bmedida\s+cautelar\b", parsed.subject or "", re.IGNORECASE)
+    ):
+        parsed.claim_type = "procedural"
+
+    checks = (
+        ("date", parsed.resolved_on),
+        ("operator", parsed.operator),
+        ("kind", parsed.appeal_kind),
+        ("subject", parsed.subject or parsed.claim_type),
+        ("claim_type", parsed.claim_type),
+        ("outcome", parsed.outcome),
+    )
+    parsed.missing = [name for name, value in checks if value is None]
+    return parsed
+
+
+def _energy_number(header: str) -> str | None:
+    match = _ENERGY_NUMBER.search(header)
+    if not match:
+        return None
+    return f"{match[1]}-{match[2]}-OS/JARU-{match[3].upper()}"
+
+
+def _energy_operator(header: str) -> str | None:
+    value = _field(
+        header,
+        r"EMPRESA\s+(?:DISTRIBUIDORA|CONCESIONARIA|LICENCIATARIA|PRESTADORA)|"
+        r"EMPRESA|CONCESIONARIA",
+    )
+    if not value:
+        return None
+    # `Enel Distribución Perú S.A.A. (en adelante, Pluz Energía Perú S.A.A.)`
+    # prints the name the case was brought against first.
+    line = value.splitlines()[0].split("(", 1)[0]
+    name = _squash(_plain(line).upper()).rstrip(" .")
+    if known := _known_operator(_letters(name), ENERGY_OPERATORS):
+        return known
+    suffix = _LEGAL_SUFFIX.search(name)
+    if not suffix:
+        return None
+    name = name[: suffix.end()].rstrip(".") + "."
+    close = get_close_matches(name, ENERGY_OPERATORS, n=1, cutoff=0.85)
+    return close[0] if close else name
+
+
+def _energy_outcome(body: str) -> str | None:
+    """The verdicts the resolutive articles declare. A JARU resolution rules
+    claim by claim, so several verdicts make the outcome `mixto`; a `NULA`
+    sends the file back without ruling on a claim."""
+    start = max(
+        body.rfind("SE RESUELVE"),
+        body.rfind("POR LO TANTO"),
+        body.rfind("Artículo 1"),
+        body.rfind("ARTÍCULO 1"),
+        body.rfind("ARTICULO 1"),
+    )
+    tail = body[start if start >= 0 else -TAIL_CHARS :]
+    if re.search(r"FUNDAD[OA]S?\s+EN\s+PARTE", tail, re.IGNORECASE):
+        return "fundado_en_parte"
+    verdicts = {
+        _VERDICTS[_plain(word).lower().rstrip("s")]
+        for word in _RULING_WORDS.findall(tail)
+    }
+    if len(verdicts) > 1:
+        return "mixto"
+    return next(iter(verdicts), None)
 
 
 def _plain(text: str) -> str:
@@ -319,9 +523,11 @@ def _known_operator_in(header: str) -> str | None:
     return None
 
 
-def _known_operator(letters: str) -> str | None:
+def _known_operator(
+    letters: str, operators: tuple[str, ...] = KNOWN_OPERATORS
+) -> str | None:
     """The known operator whose name opens `letters`, allowing for misread letters."""
-    for known in KNOWN_OPERATORS:
+    for known in operators:
         stem = _letters(_LEGAL_SUFFIX.sub("", known))
         if SequenceMatcher(None, letters[: len(stem)], stem).ratio() >= 0.9:
             return known
@@ -342,7 +548,11 @@ def _subject(header: str) -> str | None:
 
 OUTCOMES = ("infundado", "fundado", "improcedente")
 OUTCOME_NAMES = (*OUTCOMES, "fundado_en_parte", "mixto", "sin_efecto")
-CLAIM_TYPE_NAMES = (*(name for name, _ in CLAIM_TYPES), "procedural")
+CLAIM_TYPE_NAMES = (
+    *(name for name, _ in CLAIM_TYPES),
+    *(name for name, _ in ENERGY_CLAIM_TYPES),
+    "procedural",
+)
 
 
 def _outcome(header: str) -> str | None:
