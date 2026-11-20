@@ -15,6 +15,12 @@ call, so visitors never spend model credit. The code is in
 
 ## The card
 
+`SYSTEMS` in `card.py` holds one prompt per sector. The prompts differ only in
+the tribunal they name — the TRASU of OSIPTEL for `telecom`, the JARU of
+Osinergmin for `energy` — and in what the sector calls the company: "empresa
+operadora" for telecom, "empresa concesionaria o distribuidora" for energy. The
+fields, the quote rules and the readings below are the same for both.
+
 The card model reads the whole body of one resolution and replies in a JSON
 schema with these fields:
 
@@ -60,9 +66,10 @@ prints its resolution id as unreadable. A call that times out or loses its
 connection skips only its own card the same way, and the next run writes it.
 
 A card is current while its `prompt_version` and `body_sha256` match the code
-and the body. `PROMPT_VERSION` hashes the system prompt and the schema, so a
-prompt change makes every card stale. A re-parsed body makes its own card stale.
-Writing a card again clears its verdict.
+and the body. `PROMPT_VERSIONS` hashes each sector's system prompt and the
+shared schema, so a prompt change makes only that sector's cards stale. A
+re-parsed body makes its own card stale. Writing a card again clears its
+verdict.
 
 The card reads the extracted body, but what it stores is redacted: the
 [redactor](corpus.md#pipeline) runs over the checked fields, readings and
@@ -80,9 +87,11 @@ point its quote does not back: its field, its number counted from 1 and the
 unbacked words of its sentence. A card with an empty list is faithful.
 [`POST /cases`](cases.md) serves only the points the judge did not list.
 
-A verdict is current while its `judge_version` matches `JUDGE_VERSION`, the hash
-of the judge prompt and schema. A judge change makes every verdict stale, and
-the next `judge` run judges the cards again.
+A verdict is current while its `judge_version` matches the sector's
+`JUDGE_VERSIONS` entry, the hash of that sector's judge prompt and the shared
+schema. `SYSTEMS` in `judge.py` holds one judge prompt per sector, differing
+like the card prompts. A judge change makes only that sector's verdicts stale,
+and the next `judge` run judges those cards again.
 
 On a pilot of 10 cards (2026-11-15), 82% of points were served. Most of the
 judge's errors were strict: it flagged points that their quote backs. A strict
@@ -108,15 +117,16 @@ refuses, such as one past the Console's workspace usage limit, stops the run the
 same way, because every later call would be refused too. The next run writes
 only the cards still missing.
 
-| Flag              | Meaning                                   |
-| ----------------- | ----------------------------------------- |
-| `--budget-usd`    | The most the run may spend. Required      |
-| `--concurrency N` | Calls in flight at once. The default is 4 |
-| `--limit N`       | Write at most N cards (`build` only)      |
+| Flag              | Meaning                                        |
+| ----------------- | ---------------------------------------------- |
+| `--budget-usd`    | The most the run may spend. Required           |
+| `--concurrency N` | Calls in flight at once. The default is 4      |
+| `--limit N`       | Write at most N cards (`build` only)           |
+| `--sector S`      | Only `telecom` or `energy`. Default: every one |
 
 `reclamos cards judge --budget-usd N` takes the same flags but `--limit`.
 
-`reclamos cards report` makes no call. It prints:
+`reclamos cards report` makes no call and takes `--sector` too. It prints:
 
 - the cards, how many are current, and their cost;
 - how many points each field kept, over the current cards;
