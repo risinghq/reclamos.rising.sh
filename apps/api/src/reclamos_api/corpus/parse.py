@@ -177,6 +177,13 @@ IMPUGNADA_OPERATORS = {
     "GZT": "ELECTRO SUR S.A.",
     "CQ": "ELECTRO SUR ESTE S.A.",
 }
+# A trade name or another spelling an operator is also written as: "Cálidda"
+# sells what Gas Natural de Lima y Callao distributes, and Win spells its own
+# name "WI-NET". The impugnada codes above double as the operator's acronym.
+OPERATOR_ALIASES = {
+    "CALIDDA": "GAS NATURAL DE LIMA Y CALLAO S.A.",
+    "WI-NET TELECOM S.A.C.": "WIN NET - TELECOM S.A.C.",
+}
 # A `NULA` sends the file back to the company without ruling on a claim, like
 # the Tribunal's `sin efecto`. `PROCEDENTE` grants the claim.
 _VERDICTS = {
@@ -698,6 +705,60 @@ def _known_operator(
 
 def _letters(text: str) -> str:
     return re.sub(r"[^A-Z]", "", _plain(text).upper())
+
+
+def same_operator(one: str, other: str) -> bool:
+    """Whether two operator names name the same company. A legal form at the
+    end, a former name in parentheses and a trade name joined by a dash do
+    not count; a trade name or an acronym alone resolves through the maps
+    above."""
+    return bool(_operator_keys(one) & _operator_keys(other))
+
+
+# The legal forms `_LEGAL_SUFFIX` reads, as the words a dotted ("S.A.A.") or
+# run-together ("SAA") spelling leaves.
+_LEGAL_FORMS = ("SA", "SAA", "SAC", "SRL", "EIRL")
+
+_ALIAS_KEYS = {
+    _letters(_LEGAL_SUFFIX.sub("", name)): _letters(_LEGAL_SUFFIX.sub("", legal))
+    for name, legal in (IMPUGNADA_OPERATORS | OPERATOR_ALIASES).items()
+}
+_ALIAS_LONGEST = max(map(len, _ALIAS_KEYS))
+
+
+def _operator_keys(name: str) -> set[str]:
+    """The companies `name` may denote: the name itself, each side of a dash
+    joining a trade name to it, and each without a trailing legal form or
+    alias."""
+    text = re.sub(r"\([^)]*\)", " ", name)
+    keys: set[str] = set()
+    for part in (text, *re.split(rf"[-{_DASHES}]", text)):
+        words = re.findall(r"[^\W\d_]+", _plain(part).upper())
+        while words:
+            keys.add("".join(words))
+            for count in range(1, min(4, len(words)) + 1):
+                if "".join(words[-count:]) in _LEGAL_FORMS:
+                    words = words[:-count]
+                    break
+            else:
+                count = _alias_words(words)
+                if count is None:
+                    break
+                keys.add(_ALIAS_KEYS["".join(words[-count:])])
+                words = words[:-count]
+    return keys
+
+
+def _alias_words(words: list[str]) -> int | None:
+    """How many trailing words spell a known alias."""
+    tail = ""
+    for count in range(1, len(words) + 1):
+        tail = words[-count] + tail
+        if tail in _ALIAS_KEYS:
+            return count
+        if len(tail) >= _ALIAS_LONGEST:
+            return None
+    return None
 
 
 def _subject(header: str) -> str | None:

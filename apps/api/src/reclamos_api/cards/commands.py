@@ -3,7 +3,6 @@ judged ahead of time, so no visitor request calls a model."""
 
 import asyncio
 import json
-import re
 from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import date
@@ -19,11 +18,11 @@ from reclamos_api.cards.card import (
 )
 from reclamos_api.cards.judge import JUDGE_VERSIONS, judge_card
 from reclamos_api.config import Settings
+from reclamos_api.corpus.parse import same_operator
 from reclamos_api.corpus.redact import redactor_from_settings
 from reclamos_api.corpus.sources import Sector
 from reclamos_api.db import database_pool
 from reclamos_api.llm.client import LanguageModel, NotBilled, ProviderFailed
-from reclamos_api.llm.quotes import normalize
 from reclamos_api.llm.spend import Budget, Ledger, SpendRefused
 
 DEFAULT_CONCURRENCY = 4
@@ -306,9 +305,5 @@ def _same(name: str, parsed: Any, read: str) -> bool:
     if name == "resolved_on":
         return isinstance(parsed, date) and parsed.isoformat() == read
     if name == "operator":
-        return _letters(str(parsed)) == _letters(read)
+        return same_operator(str(parsed), read)
     return parsed == read
-
-
-def _letters(name: str) -> str:
-    return re.sub(r"[^a-z]", "", normalize(name))
