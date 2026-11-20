@@ -12,7 +12,7 @@ default-groups = ["dev"]
 [dependency-groups]
 dev = [
   "asyncpg-stubs>=0.32.0",
-  "basedpyright>=1.39.9",
+  "basedpyright>=1.40.2",
   "boto3-stubs-lite[s3]>=1.44.7",
   "httpx2>=2.16.2",
   "pytest>=9.2.0",
