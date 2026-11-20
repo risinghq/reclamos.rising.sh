@@ -140,8 +140,13 @@ only the cards still missing.
 - each reading that disagrees with parse, and each reading where parse has no
   value.
 
-The operator reading matches parse when their letters match, so "América Móvil
-Perú S.A.C." matches "AMERICA MOVIL PERU S.A.C.". A date matches on its value.
+The operator reading matches parse when both name the same company
+(`same_operator` in `corpus/parse.py`). A different legal form ("Hidrandina
+S.A." and "HIDRANDINA S.A.A."), a former name in parentheses ("(antes ...)") and
+a trade name joined by a dash ("... S.A. — Cálidda") do not count. A trade name
+or acronym alone ("Cálidda", "GNLC") matches through `OPERATOR_ALIASES` and
+`IMPUGNADA_OPERATORS`, where the parser maps operator names. A date matches on
+its value.
 
 ## Limits
 
