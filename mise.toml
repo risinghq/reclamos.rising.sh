@@ -3,8 +3,8 @@ python.uv_venv_auto = "source"
 
 [tools]
 python = "3.15.2"
-uv = "0.13.7"
-bun = "1.4.4"
+uv = "0.13.9"
+bun = "1.4.5"
 terraform = "1.17.2"
 tflint = "0.66.0"
 
