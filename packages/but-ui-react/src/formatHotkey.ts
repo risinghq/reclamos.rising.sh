@@ -1,4 +1,4 @@
-import { formatForDisplay } from "@tanstack/react-hotkeys";
+import { formatForDisplay, type DisplayHotkeyChord } from "@tanstack/react-hotkeys";
 
 const modifierOrder = ["⌃", "⌥", "⇧", "⌘"];
 
@@ -12,5 +12,5 @@ const sortModifiers = (keys: Array<string>): Array<string> => [
 // This wrapper ensures the format matches Apple's HIG and thereby also what
 // we show in context menus.
 // https://github.com/TanStack/hotkeys/issues/136
-export const formatForDisplaySorted = (hotkey: Parameters<typeof formatForDisplay>[0]): string =>
-	sortModifiers(formatForDisplay(hotkey).split(" ")).join(" ");
+export const formatForDisplaySorted = (hotkey: string): string =>
+	sortModifiers(formatForDisplay(hotkey as DisplayHotkeyChord).split(" ")).join(" ");
