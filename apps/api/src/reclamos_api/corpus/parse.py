@@ -33,7 +33,7 @@ MONTHS = {
 
 # `PARSER_VERSION` marks what filled the parsed fields: a change to the
 # parser bumps it so a crawl re-parses the rows an older parser read.
-PARSER_VERSION = "2"
+PARSER_VERSION = "3"
 
 # These labels end the value of the preceding field.
 _LABELS = (
@@ -112,22 +112,44 @@ _ENERGY_NUMBER = re.compile(
 # A JARU expediente is the twelve-digit file number.
 _ENERGY_EXPEDIENTE = re.compile(r"EXPEDIENTE\s*N?[°º.]?\s*(\d{12})", re.IGNORECASE)
 # The resolutive articles sit at the end of the resolution.
-_RULING_WORDS = re.compile(
-    r"\b(FUNDAD[OA]S?|INFUNDAD[OA]S?|IMPROCEDENTE|NUL[OA]S?|NULIDAD)\b", re.IGNORECASE
+_VERDICT_WORDS = (
+    r"FUNDAD[OA]S?|INFUNDAD[OA]S?|IMPROCEDENTES?|PROCEDENTES?|NUL[OA]S?|NULIDAD"
 )
-# A ruling written as a disposition, not a verdict word. `CARECE DE OBJETO` and
-# `DESESTIMAR` dismiss the appeal; `ACUMULAR`, `SUSPENDER`, `RECTIFICAR`,
-# `ESTÉSE` and `LEVANTAR` end or move the procedure without ruling a claim.
-# Only verb inflections match: the nouns (`acumulación`, `desestimación`,
-# `levantamiento`, `rectificación`) are excluded, since an article can quote
-# them without ordering anything.
+_RULING_WORDS = re.compile(rf"\b({_VERDICT_WORDS})\b", re.IGNORECASE)
+# A `declar*` form binds the verdict that follows it, with its subject or
+# object in between ("que declaró el reclamo INFUNDADO"). The JARU rules with
+# `declarar`, `declararlo` or `declara`. The verdict it overturns follows the
+# past `declaró` ("REVOCAR la Resolución ... que declaró el reclamo INFUNDADO
+# ... declararlo FUNDADO"). A footnote quoting the Reclamos directive binds
+# it to `será declarada`, `podrá declararse` or `declarará`.
+_DECLARED_VERDICT = re.compile(
+    rf"\b(declar\w+)\W+"
+    rf"((?:(?!\b(?:declar\w+|{_VERDICT_WORDS})\b)\w+\W+){{0,8}}?)"
+    rf"({_VERDICT_WORDS})\b",
+    re.IGNORECASE,
+)
+_PARTIAL_VERDICT = re.compile(r"FUNDAD[OA]S?\s+EN\s+PARTE", re.IGNORECASE)
+_JARU_DECLARATION = re.compile(r"declar(ar(l[oa]s?)?|ando|a)", re.IGNORECASE)
+_APPEALED_DECLARATION = re.compile(r"declar([oó]|aron)", re.IGNORECASE)
+# A `declaró` verdict still counts when the article confirms the resolution
+# that declared it instead of revoking it.
+_DISPOSITION = re.compile(
+    r"\b(CONFIRMA\w*|REVOCA\w*|ANULA\w*|INTEGRA\w*)\b", re.IGNORECASE
+)
+# A ruling written as a disposition, not a verdict word. `EXTEMPORÁNEO` and
+# `INADMISIBLE` still rule the claim as inadmissible, so they read
+# `improcedente`. `CARECE DE OBJETO`, `DESESTIMAR`, `ACUMULAR`, `SUSPENDER`,
+# `RECTIFICAR`, `LEVANTAR` and `ESTÉSE` end the file without ruling on the
+# claim, so they read `sin_efecto`. Only verb inflections match. The nouns
+# (`acumulación`, `desestimación`, `levantamiento`, `rectificación`) are
+# excluded, since an article can quote them without ordering anything.
 _PROCEDURAL_DISMISSAL = re.compile(
-    r"CARECE\s+DE\s+OBJETO|DESESTIMA(?!CI[OÓ]N|TORI)\w*|EXTEMPOR[AÁ]NE[OA]S?\b"
-    r"|INADMISIBLES?\b",
+    r"EXTEMPOR[AÁ]NE[OA]S?\b|INADMISIBLES?\b",
     re.IGNORECASE,
 )
 _PROCEDURAL_RULING = re.compile(
-    r"\b(ACUMULA(?!CI[OÓ]N|MIENTO)\w*|SUSPEND\w*|RECTIFICA(?!CI[OÓ]N)\w*"
+    r"CARECE\s+DE\s+OBJETO|DESESTIMA(?!CI[OÓ]N|TORI)\w*"
+    r"|\b(ACUMULA(?!CI[OÓ]N|MIENTO)\w*|SUSPEND\w*|RECTIFICA(?!CI[OÓ]N)\w*"
     r"|LEVANTA(?!MIENTO)\w*|EST[EÉ]SE)\b",
     re.IGNORECASE,
 )
@@ -156,13 +178,14 @@ IMPUGNADA_OPERATORS = {
     "CQ": "ELECTRO SUR ESTE S.A.",
 }
 # A `NULA` sends the file back to the company without ruling on a claim, like
-# the Tribunal's `sin efecto`.
+# the Tribunal's `sin efecto`. `PROCEDENTE` grants the claim.
 _VERDICTS = {
     "fundado": "fundado",
     "fundada": "fundado",
     "infundado": "infundado",
     "infundada": "infundado",
     "improcedente": "improcedente",
+    "procedente": "fundado",
     "nulo": "sin_efecto",
     "nula": "sin_efecto",
     "nulidad": "sin_efecto",
@@ -466,27 +489,50 @@ def _energy_kind(summary: str, subject: str | None) -> str:
 
 def _energy_outcome(body: str) -> str | None:
     """The verdicts the resolutive articles declare. A JARU resolution rules
-    claim by claim, so several verdicts make the outcome `mixto`; a `NULA`
-    sends the file back without ruling on a claim. A procedural disposition —
-    `CARECE DE OBJETO`, `DESESTIMAR`, `ACUMULAR` and the like — is read when
-    no verdict word appears."""
+    claim by claim, so several claim verdicts make the outcome `mixto`. A
+    `NULA` of the resolution under appeal sends the file back without ruling
+    on a claim, so it yields to the claim verdict when one is declared. A
+    procedural disposition (`CARECE DE OBJETO`, `DESESTIMAR`, `ACUMULAR` and
+    the like) is read when no verdict word appears."""
     tail = _resolutive_tail(body)
-    if re.search(r"FUNDAD[OA]S?\s+EN\s+PARTE", tail, re.IGNORECASE):
+    bound = {match.start(3): match[1] for match in _DECLARED_VERDICT.finditer(tail)}
+    if any(
+        _jaru_declares(bound.get(match.start()), tail, match.start())
+        for match in _PARTIAL_VERDICT.finditer(tail)
+    ):
         return "fundado_en_parte"
     verdicts = {
-        _VERDICTS[_plain(word).lower().rstrip("s")]
-        for word in _RULING_WORDS.findall(tail)
+        _VERDICTS[_plain(match[0]).lower().rstrip("s")]
+        for match in _RULING_WORDS.finditer(tail)
+        if _jaru_declares(bound.get(match.start()), tail, match.start())
     }
-    if len(verdicts) > 1:
+    merits = verdicts - {"sin_efecto"}
+    if len(merits) > 1:
         return "mixto"
+    if merits:
+        return merits.pop()
     if verdicts:
-        return next(iter(verdicts))
+        return "sin_efecto"
     articles = _article_paragraphs(tail)
     if _PROCEDURAL_DISMISSAL.search(articles):
         return "improcedente"
     if _PROCEDURAL_RULING.search(articles):
         return "sin_efecto"
     return None
+
+
+def _jaru_declares(verb: str | None, tail: str, end: int) -> bool:
+    """A verdict word is the JARU's own ruling unless a `declar*` form binds
+    it to another act. The past `declaró` quotes the resolution under appeal
+    and counts only under `CONFIRMAR`. The other inflections quote a norm."""
+    if verb is None:
+        return True
+    if _JARU_DECLARATION.fullmatch(verb):
+        return True
+    if not _APPEALED_DECLARATION.fullmatch(verb):
+        return False
+    dispositions = _DISPOSITION.findall(tail[:end])
+    return bool(dispositions) and dispositions[-1].lower().startswith("confirma")
 
 
 def _resolutive_tail(body: str) -> str:

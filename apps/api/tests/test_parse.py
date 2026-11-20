@@ -459,8 +459,8 @@ def test_reads_the_operator_named_after_contra() -> None:
 @pytest.mark.parametrize(
     ("ruling", "outcome"),
     [
-        ("Declarar que CARECE DE OBJETO emitir pronunciamiento", "improcedente"),
-        ("DESESTIMAR el recurso de apelación", "improcedente"),
+        ("Declarar que CARECE DE OBJETO emitir pronunciamiento", "sin_efecto"),
+        ("DESESTIMAR el recurso de apelación", "sin_efecto"),
         ("Declarar IMPROCEDENTE por extemporáneo el recurso", "improcedente"),
         ("ACUMULAR los procedimientos de reclamo signados", "sin_efecto"),
         ("SUSPENDER el procedimiento para recabar información", "sin_efecto"),
@@ -492,6 +492,71 @@ def test_reads_a_jaru_date_the_scan_broke_up(line: str, expected: date) -> None:
     body = JARU_APPEAL_2021.replace("Lima, 05 de enero del 2021", line)
 
     assert parse_resolution(body, sector="energy").resolved_on == expected
+
+
+@pytest.mark.parametrize(
+    ("ruling", "outcome"),
+    [
+        (
+            "REVOCAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "INFUNDADO el reclamo del recurrente y, en consecuencia, "
+            "declararlo FUNDADO",
+            "fundado",
+        ),
+        (
+            "REVOCAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "INFUNDADO el reclamo del recurrente y, en consecuencia, "
+            "declararlo IMPROCEDENTE",
+            "improcedente",
+        ),
+        (
+            "REVOCAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "FUNDADO EN PARTE el reclamo del recurrente y, en consecuencia, "
+            "declararlo FUNDADO",
+            "fundado",
+        ),
+        (
+            "REVOCAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "el reclamo FUNDADO EN PARTE y, en consecuencia, declararlo "
+            "FUNDADO",
+            "fundado",
+        ),
+        (
+            "REVOCAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "el reclamo INFUNDADO y, en consecuencia, declararlo FUNDADO",
+            "fundado",
+        ),
+        (
+            "CONFIRMAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "INFUNDADO el reclamo del recurrente",
+            "infundado",
+        ),
+        (
+            "CONFIRMAR la Resolución N* GNLC-RES-06541-2021 que declaró "
+            "FUNDADO EN PARTE el reclamo del recurrente",
+            "fundado_en_parte",
+        ),
+        (
+            "Declarar NULA la Resolución N* GNLC-RES-06541-2021 y LO ACTUADO; "
+            "y declarar FUNDADO el reclamo por el silencio administrativo "
+            "positivo",
+            "fundado",
+        ),
+        (
+            "Declarar FUNDADO el reclamo de la recurrente.\n\n"
+            '2 "37.2 La queja será declarada improcedente cuando el '
+            "procedimiento de reclamo haya concluido",
+            "fundado",
+        ),
+    ],
+)
+def test_reads_the_verdict_the_jaru_declares(ruling: str, outcome: str) -> None:
+    body = JARU_APPEAL_2021.replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        f"Artículo 1.- {ruling}.",
+    )
+
+    assert parse_resolution(body, sector="energy").outcome == outcome
 
 
 def test_considerations_are_not_the_ruling() -> None:

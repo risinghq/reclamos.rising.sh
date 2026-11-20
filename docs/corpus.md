@@ -122,14 +122,20 @@ Energy parsing reads a JARU header, whose layout differs from TRASU: the
 resolution number follows `OS/JARU-`, the operator sits on an
 `Empresa distribuidora:` (or `Empresa:`) line, and the claim sits on `Materia:`.
 A JARU resolution often rules claim by claim in its resolutive section, so
-`mixto` is common; a `NULO`/`NULA`/`NULIDAD` verdict maps to `sin_efecto`.
+`mixto` is common; a `NULO`/`NULA`/`NULIDAD` verdict maps to `sin_efecto`, and
+`PROCEDENTE` maps to `fundado`. A resolutive can quote the ruling it overturns —
+`REVOCAR la Resolución ... que declaró INFUNDADO ... declararlo FUNDADO` reads
+`fundado` — while a verdict kept under `CONFIRMAR` still counts. When a `NULA`
+shares the file with a claim verdict, the claim verdict wins.
 
 Not every JARU file is an appeal. A `queja` complains about the procedure
 itself, so it reads the kind from the `Materia:` line or the page summary, and a
 queja gets the claim type `procedural`. A resolution that rules only on the
-procedure — `ACUMULAR`, `SUSPENDER`, `RECTIFICAR`, `CARECE DE OBJETO`,
-`DESESTIMAR` — is read as a procedural ruling: its disposition maps to
-`improcedente` or `sin_efecto` and its claim type is `procedural`.
+procedure is read as a procedural ruling and gets the claim type `procedural`:
+`EXTEMPORÁNEO` and `INADMISIBLE` declare the claim inadmissible and map to
+`improcedente`, while `CARECE DE OBJETO`, `DESESTIMAR`, `ACUMULAR`, `SUSPENDER`,
+`RECTIFICAR`, `LEVANTAR` and `ESTÉSE` end the file without a ruling on the claim
+and map to `sin_efecto`.
 
 Newer JARU formats print no `Empresa` line and call the company "la empresa
 distribuidora" throughout. For those, the operator comes from the party named
