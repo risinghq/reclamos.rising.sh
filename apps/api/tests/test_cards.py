@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from fakeembed import HashingEmbedder
@@ -38,6 +39,16 @@ def card_or_verdict(prompt: Prompt) -> str:
             {"unsupported": [{"field": "claim", "point": 1, "claim": "reclamó"}]}
         )
     body = body_of(prompt)
+    operator = reading("América Móvil Perú S.A.C.", OPERATOR_LINE)
+    if prompt.system == card.SYSTEMS["energy"]:
+        concesionaria = re.search(r"Concesionaria: ([^\n]+)", body)
+        assert concesionaria
+        expediente = re.search(r"Expediente N.° 2025000000(\d\d)", body)
+        assert expediente
+        operator = reading(
+            OPERATOR_READINGS.get(expediente[1], concesionaria[1]),
+            concesionaria[0],
+        )
     return json.dumps(
         {
             "claim": [
@@ -51,7 +62,7 @@ def card_or_verdict(prompt: Prompt) -> str:
                 point("", body[1100:1200]),
             ],
             "outcome": reading("fundado", OUTCOME_LINE),
-            "operator": reading("América Móvil Perú S.A.C.", OPERATOR_LINE),
+            "operator": operator,
             "resolved_on": reading("2022-08-24", DATE_LINE),
         }
     )
@@ -202,6 +213,32 @@ ordenar a la concesionaria emitir un nuevo pronunciamiento sobre el reclamo e
 informar a Osinergmin y al usuario el cumplimiento de lo dispuesto.
 """
 
+# The operator the card reads from each seeded JARU body, by the last two
+# digits of its expediente. Each names the company its Concesionaria line
+# gives — as a trade name, an acronym or another legal form — except the
+# generic "empresa distribuidora", which is a real disagreement.
+OPERATOR_READINGS = {
+    "02": "Gas Natural de Lima y Callao S.A. - Cálidda",
+    "03": "Gas Natural de Lima y Callao S.A. — Cálidda",
+    "04": "Cálidda — Gas Natural de Lima y Callao S.A.",
+    "05": "Cálidda",
+    "06": "GNLC",
+    "07": "Hidrandina S.A.",
+    "08": "empresa distribuidora",
+    "09": "Electro Sur Este S.A.A.",
+}
+CONCESIONARIAS = {
+    "07": ("Hidrandina S.A.A.", "HIDRANDINA S.A.A."),
+    "09": ("Electro Sur Este S.A.", "ELECTRO SUR ESTE S.A."),
+}
+
+
+def jaru_body(expediente: str, concesionaria: str) -> str:
+    return JARU_BODY.replace("202500000001", f"2025000000{expediente}").replace(
+        "Concesionaria: Pluz Energía Perú S.A.A.",
+        f"Concesionaria: {concesionaria}",
+    )
+
 
 @pytest.mark.integration
 def test_each_sector_builds_and_judges_under_its_own_prompt(
@@ -219,6 +256,24 @@ def test_each_sector_builds_and_judges_under_its_own_prompt(
         JARU,
         JARU_BODY,
     )
+    for expediente in OPERATOR_READINGS:
+        concesionaria, operator = CONCESIONARIAS.get(
+            expediente,
+            ("Gas Natural de Lima y Callao S.A.", "GAS NATURAL DE LIMA Y CALLAO S.A."),
+        )
+        query(
+            indexed,
+            """
+            INSERT INTO resolutions (id, page_url, expediente, published_on,
+                                     sector, body, operator)
+            VALUES ($1, 'https://www.gob.pe/x', $3, '2025-01-15', 'energy',
+                    $2, $4)
+            """,
+            JARU + int(expediente),
+            jaru_body(expediente, concesionaria),
+            f"00{expediente}-2025-OS/JARU-S1",
+            operator,
+        )
     model = FakeModel(card_or_verdict)
 
     out = cards(
@@ -230,7 +285,7 @@ def test_each_sector_builds_and_judges_under_its_own_prompt(
     out = cards(
         "build", "--budget-usd", "1", "--sector", "energy", model=model, capsys=capsys
     )
-    assert "cards written: 1 of 1 without a current card" in out
+    assert "cards written: 9 of 9 without a current card" in out
     assert model.prompts[-1].system == card.SYSTEMS["energy"]
 
     out = cards("build", "--budget-usd", "1", model=model, capsys=capsys)
@@ -241,11 +296,16 @@ def test_each_sector_builds_and_judges_under_its_own_prompt(
     out = cards(
         "judge", "--budget-usd", "1", "--sector", "energy", model=model, capsys=capsys
     )
-    assert "cards judged: 1 of 1 without a verdict" in out
+    assert "cards judged: 9 of 9 without a verdict" in out
     assert model.prompts[-1].system == judge.SYSTEMS["energy"]
 
     out = cards("report", "--sector", "energy", model=model, capsys=capsys)
-    assert "cards: 1 (1 current)" in out
-    assert "judged: 1, faithful 0" in out
+    assert "cards: 9 (9 current)" in out
+    assert "judged: 9, faithful 0" in out
+    assert "disagreements with parse: 1" in out
+    assert (
+        "8000009 operator: parse GAS NATURAL DE LIMA Y CALLAO S.A.,"
+        " card empresa distribuidora" in out
+    ), "a dash-joined trade name, an acronym or a legal form is the company"
     out = cards("report", model=model, capsys=capsys)
-    assert "cards: 5 (5 current)" in out
+    assert "cards: 13 (13 current)" in out
