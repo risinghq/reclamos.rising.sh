@@ -7,8 +7,8 @@ import httpx2
 import pytest
 from fakeembed import HashingEmbedder
 from fastapi.testclient import TestClient
-from reclamos_api.cards.card import PROMPT_VERSION
-from reclamos_api.cards.judge import JUDGE_VERSION
+from reclamos_api.cards.card import PROMPT_VERSIONS
+from reclamos_api.cards.judge import JUDGE_VERSIONS
 from reclamos_api.cards.repository import body_sha256
 from reclamos_api.config import Settings
 from reclamos_api.corpus.repository import vector_literal
@@ -28,10 +28,10 @@ def save_card(
     settings: Settings,
     resolution_id: int,
     *,
-    prompt_version: str = PROMPT_VERSION,
+    prompt_version: str = PROMPT_VERSIONS["telecom"],
     body: str | None = None,
     unsupported: list[dict[str, Any]] | None = None,
-    judge_version: str = JUDGE_VERSION,
+    judge_version: str = JUDGE_VERSIONS["telecom"],
 ) -> None:
     """A card with a claim and evidence. `unsupported` None leaves it unjudged.
     `judge_version` is the judge prompt that gave the verdict."""
