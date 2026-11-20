@@ -15,11 +15,14 @@ call, so visitors never spend model credit. The code is in
 
 ## The card
 
-`SYSTEMS` in `card.py` holds one prompt per sector. The prompts differ only in
-the tribunal they name — the TRASU of OSIPTEL for `telecom`, the JARU of
-Osinergmin for `energy` — and in what the sector calls the company: "empresa
-operadora" for telecom, "empresa concesionaria o distribuidora" for energy. The
-fields, the quote rules and the readings below are the same for both.
+`SYSTEMS` in `card.py` holds one prompt per sector. The prompts differ in the
+tribunal they name — the TRASU of OSIPTEL for `telecom`, the JARU of Osinergmin
+for `energy` — and in what the sector calls the company: "empresa operadora" for
+telecom, "empresa concesionaria o distribuidora" for energy. The energy prompt
+also spells out what each `outcome` value means, since a JARU resolutive can
+quote the ruling it overturns and a `nula` sends the file back without ruling on
+the claim. The fields, the quote rules and the readings below are the same for
+both.
 
 The card model reads the whole body of one resolution and replies in a JSON
 schema with these fields:

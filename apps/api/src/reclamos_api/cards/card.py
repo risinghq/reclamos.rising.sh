@@ -84,7 +84,9 @@ muestra, deja "value" y "quote" vacíos.
 
 # The energy prompt keeps the same fields, the same quote rules and the same
 # readings; it names the JARU instead of the TRASU, and what the sector calls
-# the company instead of "empresa operadora".
+# the company instead of "empresa operadora". It also glosses each outcome
+# value, since a JARU resolutive can quote the verdict it overturns and
+# `nula` sends the file back without a ruling on the claim.
 ENERGY_SYSTEM = """\
 Lees resoluciones de la JARU, la Junta de Apelaciones de Reclamos de Usuarios \
 de Osinergmin, que resuelve las apelaciones y quejas de usuarios de \
@@ -122,9 +124,18 @@ y no cambies palabras.
 - Si el texto no dice algo que un campo pide, deja su lista vacía.
 
 Además lee del texto:
-- outcome: lo que el tribunal declaró sobre la apelación o la queja en la \
-parte resolutiva. Usa "mixto" si declaró cosas distintas sobre partes del \
-caso.
+- outcome: lo que la Junta declara sobre la apelación o la queja en la \
+parte resolutiva, no lo que declara la resolución apelada que la resolución \
+cita: en "REVOCAR la Resolución que declaró INFUNDADO el reclamo y, en \
+consecuencia, declararlo FUNDADO" el outcome es "fundado", y en "CONFIRMAR \
+la Resolución que declaró INFUNDADO el reclamo" es "infundado". Los valores \
+son "fundado" si declara el reclamo fundado o procedente, "infundado" si lo \
+declara infundado, "fundado_en_parte" si lo declara fundado solo en parte, \
+"improcedente" si declara improcedente el reclamo o el recurso, "mixto" si \
+declara cosas distintas sobre reclamos o extremos distintos y "sin_efecto" \
+si no resuelve el reclamo: declara nula la resolución apelada o la \
+resolución ficta y ordena un nuevo pronunciamiento, declara que carece de \
+objeto pronunciarse o desestima la solicitud.
 - operator: el nombre de la empresa concesionaria o distribuidora como \
 aparece en el texto.
 - resolved_on: la fecha de la resolución, en formato AAAA-MM-DD.
