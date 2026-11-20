@@ -12,14 +12,15 @@ from typing import Any, cast
 from reclamos_api.cards import repository
 from reclamos_api.cards.card import (
     FIELDS,
-    PROMPT_VERSION,
+    PROMPT_VERSIONS,
     Unreadable,
     redact_card,
     write_card,
 )
-from reclamos_api.cards.judge import JUDGE_VERSION, judge_card
+from reclamos_api.cards.judge import JUDGE_VERSIONS, judge_card
 from reclamos_api.config import Settings
 from reclamos_api.corpus.redact import redactor_from_settings
+from reclamos_api.corpus.sources import Sector
 from reclamos_api.db import database_pool
 from reclamos_api.llm.client import LanguageModel, NotBilled, ProviderFailed
 from reclamos_api.llm.quotes import normalize
@@ -35,6 +36,7 @@ async def build(
     budget_usd: float,
     concurrency: int = DEFAULT_CONCURRENCY,
     limit: int | None = None,
+    sector: Sector | None = None,
 ) -> str:
     """Write a card for every resolution without a current one. Stops before
     the run would pass `budget_usd` or the daily cap."""
@@ -47,13 +49,18 @@ async def build(
     ) as pool:
         ledger = Ledger(pool, daily_cap_usd=settings.daily_usd_cap)
         async with pool.acquire() as connection:
-            sources = (await repository.stale_sources(connection))[:limit]
+            sources = (await repository.stale_sources(connection, sector))[:limit]
 
         async def one(source: repository.Source) -> None:
             nonlocal written
             try:
                 card, usd = await write_card(
-                    ledger, model, settings.card_model, source.body, budget=budget
+                    ledger,
+                    model,
+                    settings.card_model,
+                    source.body,
+                    sector=source.sector,
+                    budget=budget,
                 )
             except Unreadable as error:
                 failed.append(f"{source.resolution_id}: {error}")
@@ -83,6 +90,7 @@ async def judge(
     *,
     budget_usd: float,
     concurrency: int = DEFAULT_CONCURRENCY,
+    sector: Sector | None = None,
 ) -> str:
     """Judge every current card that has no current verdict."""
     budget = Budget(budget_usd)
@@ -93,14 +101,19 @@ async def judge(
     ) as pool:
         ledger = Ledger(pool, daily_cap_usd=settings.daily_usd_cap)
         async with pool.acquire() as connection:
-            cards = await repository.unjudged(connection)
+            cards = await repository.unjudged(connection, sector)
 
-        async def one(card: tuple[int, Any]) -> None:
+        async def one(card: tuple[int, Any, Sector]) -> None:
             nonlocal judged
-            resolution_id, fields = card
+            resolution_id, fields, card_sector = card
             try:
                 verdict = await judge_card(
-                    ledger, model, settings.judge_model, fields, budget=budget
+                    ledger,
+                    model,
+                    settings.judge_model,
+                    fields,
+                    sector=card_sector,
+                    budget=budget,
                 )
             except ProviderFailed:
                 unread.append(resolution_id)
@@ -114,6 +127,7 @@ async def judge(
                     resolution_id,
                     verdict.unsupported,
                     judge_model=settings.judge_model,
+                    sector=card_sector,
                 )
             judged += 1
 
@@ -201,7 +215,7 @@ async def _run_all[T](
     return stopped
 
 
-async def report(settings: Settings) -> str:
+async def report(settings: Settings, sector: Sector | None = None) -> str:
     """What the cards hold, what the checks dropped, and where the model's
     reading and parse disagree."""
     async with (
@@ -210,14 +224,18 @@ async def report(settings: Settings) -> str:
         ) as pool,
         pool.acquire() as connection,
     ):
-        rows = await repository.report_rows(connection)
+        rows = await repository.report_rows(connection, sector)
     return format_report(rows)
 
 
 def format_report(rows: Sequence[Any]) -> str:
     """Counts over the current cards and their current verdicts. A stale card
     is counted, not read: its prompt may have stored another shape."""
-    current = [row for row in rows if row["prompt_version"] == PROMPT_VERSION]
+    current = [
+        row
+        for row in rows
+        if row["prompt_version"] == PROMPT_VERSIONS.get(row["sector"])
+    ]
     points: Counter[str] = Counter()
     dropped_points = dropped_readings = 0
     disagree: list[str] = []
@@ -252,7 +270,7 @@ def format_report(rows: Sequence[Any]) -> str:
                 disagree.append(
                     f"{row['resolution_id']} {name}: parse {parsed}, card {read}"
                 )
-        if row["judge_version"] == JUDGE_VERSION:
+        if row["judge_version"] == JUDGE_VERSIONS.get(row["sector"]):
             judged += 1
             judged_points += card_points.total()
             flagged = {

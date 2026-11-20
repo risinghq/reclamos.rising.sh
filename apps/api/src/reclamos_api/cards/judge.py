@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from reclamos_api.cards.card import FIELDS, Points
+from reclamos_api.corpus.sources import Sector
 from reclamos_api.llm.client import LanguageModel, Prompt
 from reclamos_api.llm.spend import Budget, Ledger
 
@@ -40,6 +41,34 @@ respalda. Un punto que su cita respalda no va en la lista, ni siquiera con \
 una nota. Si todos son fieles, deja "unsupported" vacío. Escribe en español.
 """
 
+# The energy judge reads the same fields and the same rule of faithfulness;
+# it names the JARU and the "empresa concesionaria o distribuidora".
+ENERGY_SYSTEM = """\
+Revisas fichas escritas a partir de resoluciones de la JARU de Osinergmin.
+
+Cada campo de la ficha tiene puntos numerados. Un punto es una oración y la \
+cita de la resolución que la respalda. Los campos son:
+- claim: qué reclamó el usuario y qué pidió.
+- operator_position: qué dijo o decidió la empresa concesionaria o \
+distribuidora antes de la apelación o la queja.
+- reasoning: por qué el tribunal decidió lo que decidió.
+- evidence: la prueba que decidió el caso, o la prueba que faltó.
+- orders: qué ordenó o declaró el tribunal en la parte resolutiva.
+
+Un punto es fiel cuando todo lo que afirma su oración está en su propia cita \
+y lo atribuye a quien lo dijo en ella: el usuario, la empresa o el tribunal. \
+Otra cita no lo respalda. Conocimiento que no está en la cita tampoco, aunque \
+sea cierto. Decir lo mismo con otras palabras, más corto o más sencillo, sí \
+es fiel. Omitir detalles de la cita también es fiel.
+
+En "unsupported" pon solo los puntos que no son fieles: el campo, su número y \
+en "claim" las palabras de la oración, copiadas tal cual, que su cita no \
+respalda. Un punto que su cita respalda no va en la lista, ni siquiera con \
+una nota. Si todos son fieles, deja "unsupported" vacío. Escribe en español.
+"""
+
+SYSTEMS: dict[Sector, str] = {"telecom": SYSTEM, "energy": ENERGY_SYSTEM}
+
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -61,10 +90,14 @@ SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-# A verdict given with another prompt or schema is out of date.
-JUDGE_VERSION = hashlib.sha256(
-    (SYSTEM + json.dumps(SCHEMA, sort_keys=True)).encode()
-).hexdigest()[:12]
+# A verdict given with another prompt or schema is out of date. Each sector
+# versions its own prompt, so a change to one makes only its verdicts stale.
+JUDGE_VERSIONS = {
+    sector: hashlib.sha256(
+        (system + json.dumps(SCHEMA, sort_keys=True)).encode()
+    ).hexdigest()[:12]
+    for sector, system in SYSTEMS.items()
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,13 +115,14 @@ async def judge_card(
     judge_model: str,
     fields: dict[str, Points],
     *,
+    sector: Sector,
     budget: Budget | None = None,
 ) -> CardVerdict:
     metered = await ledger.complete(
         model,
         Prompt(
             model=judge_model,
-            system=SYSTEM,
+            system=SYSTEMS[sector],
             text=card_text(fields),
             schema=SCHEMA,
             max_tokens=MAX_JUDGE_TOKENS,

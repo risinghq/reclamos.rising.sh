@@ -5,14 +5,16 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from reclamos_api.cards.card import PROMPT_VERSION, Card, Point, Points
-from reclamos_api.cards.judge import JUDGE_VERSION
+from reclamos_api.cards.card import PROMPT_VERSIONS, Card, Point, Points
+from reclamos_api.cards.judge import JUDGE_VERSIONS
 from reclamos_api.corpus.redact import REDACTOR_VERSION
+from reclamos_api.corpus.sources import Sector
 
 
 @dataclass(frozen=True, slots=True)
 class Source:
     resolution_id: int
+    sector: Sector
     body: str
     body_sha256: str
 
@@ -21,21 +23,27 @@ def body_sha256(body: str) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-async def stale_sources(connection: Any) -> list[Source]:
-    """Resolutions with a body and no current card, smallest id first."""
+async def stale_sources(connection: Any, sector: Sector | None = None) -> list[Source]:
+    """Resolutions with a body and no current card, smallest id first. A card
+    is current under the prompt version of its resolution's sector."""
     rows = await connection.fetch(
         """
-        SELECT r.id, r.body, c.prompt_version, c.body_sha256
+        SELECT r.id, r.sector, r.body, c.prompt_version, c.body_sha256
         FROM resolutions r LEFT JOIN cards c ON c.resolution_id = r.id
         WHERE r.body IS NOT NULL AND r.body <> ''
+          AND ($1::text IS NULL OR r.sector = $1)
         ORDER BY r.id
-        """
+        """,
+        sector,
     )
     sources: list[Source] = []
     for row in rows:
         digest = body_sha256(row["body"])
-        if row["prompt_version"] != PROMPT_VERSION or row["body_sha256"] != digest:
-            sources.append(Source(row["id"], row["body"], digest))
+        if (
+            row["prompt_version"] != PROMPT_VERSIONS.get(row["sector"])
+            or row["body_sha256"] != digest
+        ):
+            sources.append(Source(row["id"], row["sector"], row["body"], digest))
     return sources
 
 
@@ -64,7 +72,7 @@ async def save_card(
             judged_at = NULL
         """,
         source.resolution_id,
-        PROMPT_VERSION,
+        PROMPT_VERSIONS[source.sector],
         source.body_sha256,
         model,
         json.dumps(
@@ -125,20 +133,36 @@ async def apply_redaction(
     )
 
 
-async def unjudged(connection: Any) -> list[tuple[int, dict[str, Points]]]:
+async def unjudged(
+    connection: Any, sector: Sector | None = None
+) -> list[tuple[int, dict[str, Points], Sector]]:
     """Current cards with at least one field and no current verdict, smallest
-    id first."""
+    id first. A card is current under the prompt version of its resolution's
+    sector, and its verdict under that sector's judge version."""
     rows = await connection.fetch(
         """
-        SELECT resolution_id, fields FROM cards
-        WHERE judge_version IS DISTINCT FROM $2
-          AND fields <> '{}'::jsonb AND prompt_version = $1
-        ORDER BY resolution_id
+        SELECT c.resolution_id, c.fields, r.sector
+        FROM cards c
+        JOIN resolutions r ON r.id = c.resolution_id
+        JOIN (VALUES ('telecom', $1, $2), ('energy', $3, $4))
+             AS v(sector, prompt_version, judge_version)
+          ON v.sector = r.sector
+        WHERE c.prompt_version = v.prompt_version
+          AND c.judge_version IS DISTINCT FROM v.judge_version
+          AND c.fields <> '{}'::jsonb
+          AND ($5::text IS NULL OR r.sector = $5)
+        ORDER BY c.resolution_id
         """,
-        PROMPT_VERSION,
-        JUDGE_VERSION,
+        PROMPT_VERSIONS["telecom"],
+        JUDGE_VERSIONS["telecom"],
+        PROMPT_VERSIONS["energy"],
+        JUDGE_VERSIONS["energy"],
+        sector,
     )
-    return [(row["resolution_id"], card_fields(row["fields"])) for row in rows]
+    return [
+        (row["resolution_id"], card_fields(row["fields"]), row["sector"])
+        for row in rows
+    ]
 
 
 async def save_verdict(
@@ -147,6 +171,7 @@ async def save_verdict(
     unsupported: list[dict[str, Any]],
     *,
     judge_model: str,
+    sector: Sector,
 ) -> None:
     await connection.execute(
         """
@@ -157,7 +182,7 @@ async def save_verdict(
         """,
         resolution_id,
         judge_model,
-        JUDGE_VERSION,
+        JUDGE_VERSIONS[sector],
         json.dumps(unsupported),
     )
 
@@ -171,15 +196,21 @@ async def served_fields(
     rows = await connection.fetch(
         """
         SELECT c.resolution_id, c.fields, c.unsupported
-        FROM cards c JOIN resolutions r ON r.id = c.resolution_id
+        FROM cards c
+        JOIN resolutions r ON r.id = c.resolution_id
+        JOIN (VALUES ('telecom', $2, $3), ('energy', $4, $5))
+             AS v(sector, prompt_version, judge_version)
+          ON v.sector = r.sector
         WHERE c.resolution_id = ANY($1::bigint[])
-          AND c.prompt_version = $2
+          AND c.prompt_version = v.prompt_version
           AND c.body_sha256 = encode(sha256(convert_to(r.body, 'UTF8')), 'hex')
-          AND c.judge_version = $3
+          AND c.judge_version = v.judge_version
         """,
         resolution_ids,
-        PROMPT_VERSION,
-        JUDGE_VERSION,
+        PROMPT_VERSIONS["telecom"],
+        JUDGE_VERSIONS["telecom"],
+        PROMPT_VERSIONS["energy"],
+        JUDGE_VERSIONS["energy"],
     )
     served: dict[int, dict[str, Points]] = {}
     for row in rows:
@@ -200,14 +231,16 @@ async def served_fields(
     return served
 
 
-async def report_rows(connection: Any) -> list[Any]:
+async def report_rows(connection: Any, sector: Sector | None = None) -> list[Any]:
     """Every card beside what parse read from the same resolution."""
     return await connection.fetch(
         """
         SELECT c.resolution_id, c.prompt_version, c.fields, c.readings, c.rejected,
                c.usd::float8 AS usd, c.judge_version, c.unsupported,
-               r.outcome, r.operator, r.resolved_on
+               r.sector, r.outcome, r.operator, r.resolved_on
         FROM cards c JOIN resolutions r ON r.id = c.resolution_id
+        WHERE ($1::text IS NULL OR r.sector = $1)
         ORDER BY c.resolution_id
-        """
+        """,
+        sector,
     )

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, cast
 
+from reclamos_api.corpus.sources import Sector
 from reclamos_api.llm.client import LanguageModel, Prompt
 from reclamos_api.llm.quotes import is_quoted
 from reclamos_api.llm.spend import Budget, Ledger
@@ -81,6 +82,58 @@ Cada lectura lleva la cita del texto que la muestra. Si el texto no la \
 muestra, deja "value" y "quote" vacíos.
 """
 
+# The energy prompt keeps the same fields, the same quote rules and the same
+# readings; it names the JARU instead of the TRASU, and what the sector calls
+# the company instead of "empresa operadora".
+ENERGY_SYSTEM = """\
+Lees resoluciones de la JARU, la Junta de Apelaciones de Reclamos de Usuarios \
+de Osinergmin, que resuelve las apelaciones y quejas de usuarios de \
+electricidad y gas natural del Perú. De cada resolución escribes una ficha \
+para que un usuario compare su caso con este.
+
+Campos de la ficha:
+- claim: qué reclamó el usuario y qué pidió.
+- operator_position: qué dijo o decidió la empresa concesionaria o \
+distribuidora antes de la apelación o la queja.
+- reasoning: por qué el tribunal decidió lo que decidió.
+- evidence: la prueba que decidió el caso, o la prueba que faltó.
+- orders: qué ordenó el tribunal en la parte resolutiva, por ejemplo que la \
+empresa anule un cobro, emita un nuevo pronunciamiento, devuelva un monto, \
+reponga el suministro o informe de lo que hizo. Si no ordenó nada a la \
+empresa, qué declaró.
+
+Cada campo es una lista de uno a tres puntos, del más importante al menos \
+importante. Un punto tiene:
+- "quote": una cita del texto. Escríbela primero.
+- "text": una oración corta de español sencillo que dice lo que dice esa cita.
+
+Reglas:
+- Usa solo el texto de la resolución. No uses otro conocimiento.
+- Cada oración dice solo lo que dice su propia cita. Lo que la cita no dice no \
+va en la oración, aunque otra parte del texto lo diga: ni motivos, ni fechas, \
+ni montos, ni nombres, ni detalles, ni consejos.
+- Un punto dice un solo hecho. Dos hechos con dos citas son dos puntos.
+- Atribuye cada cosa a quien la dijo en la cita: el usuario, la empresa o el \
+tribunal.
+- Cada cita copia, carácter por carácter, de una a tres oraciones completas \
+del texto. Una cita que termina en dos puntos o a mitad de una idea no dice \
+nada: copia también lo que sigue. No corrijas errores de escritura ni de OCR, \
+y no cambies palabras.
+- Si el texto no dice algo que un campo pide, deja su lista vacía.
+
+Además lee del texto:
+- outcome: lo que el tribunal declaró sobre la apelación o la queja en la \
+parte resolutiva. Usa "mixto" si declaró cosas distintas sobre partes del \
+caso.
+- operator: el nombre de la empresa concesionaria o distribuidora como \
+aparece en el texto.
+- resolved_on: la fecha de la resolución, en formato AAAA-MM-DD.
+Cada lectura lleva la cita del texto que la muestra. Si el texto no la \
+muestra, deja "value" y "quote" vacíos.
+"""
+
+SYSTEMS: dict[Sector, str] = {"telecom": SYSTEM, "energy": ENERGY_SYSTEM}
+
 
 def _field_schema() -> dict[str, Any]:
     return {
@@ -116,10 +169,14 @@ SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-# A card written with another prompt or schema is out of date.
-PROMPT_VERSION = hashlib.sha256(
-    (SYSTEM + json.dumps(SCHEMA, sort_keys=True)).encode()
-).hexdigest()[:12]
+# A card written with another prompt or schema is out of date. Each sector
+# versions its own prompt, so a change to one makes only its cards stale.
+PROMPT_VERSIONS = {
+    sector: hashlib.sha256(
+        (system + json.dumps(SCHEMA, sort_keys=True)).encode()
+    ).hexdigest()[:12]
+    for sector, system in SYSTEMS.items()
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +232,7 @@ async def write_card(
     card_model: str,
     body: str,
     *,
+    sector: Sector,
     budget: Budget | None = None,
 ) -> tuple[Card, float]:
     """The checked card for `body` and what the call cost."""
@@ -182,7 +240,7 @@ async def write_card(
         model,
         Prompt(
             model=card_model,
-            system=SYSTEM,
+            system=SYSTEMS[sector],
             text=f"Texto de la resolución:\n\n{body}",
             schema=SCHEMA,
             max_tokens=MAX_CARD_TOKENS,

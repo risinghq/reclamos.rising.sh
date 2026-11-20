@@ -16,6 +16,7 @@ from reclamos_api.corpus.export import ExportError, export_dataset
 from reclamos_api.corpus.jobs import QUEUE_NAME, Pipeline
 from reclamos_api.corpus.redact import redactor_from_settings
 from reclamos_api.corpus.site import Fetcher
+from reclamos_api.corpus.sources import SECTORS
 from reclamos_api.corpus.stats import collect_stats, format_stats
 from reclamos_api.corpus.store import store_from_settings
 from reclamos_api.db import database_pool
@@ -107,10 +108,24 @@ def build_parser() -> argparse.ArgumentParser:
             default=card_commands.DEFAULT_CONCURRENCY,
             help="calls in flight at once (default: %(default)s)",
         )
+        step.add_argument(
+            "--sector",
+            choices=SECTORS,
+            default=None,
+            help="only this sector's resolutions (default: every sector)",
+        )
     card_actions.choices["build"].add_argument(
         "--limit", type=int, default=None, help="write at most N cards"
     )
-    card_actions.add_parser("report", help="print what the cards hold and drop")
+    report = card_actions.add_parser(
+        "report", help="print what the cards hold and drop"
+    )
+    report.add_argument(
+        "--sector",
+        choices=SECTORS,
+        default=None,
+        help="only this sector's cards (default: every sector)",
+    )
     card_actions.add_parser(
         "redact",
         help="redact the stored card fields and readings with the current redactor",
@@ -279,7 +294,7 @@ async def run_cards(
     model: LanguageModel | None,
 ) -> str:
     if arguments.action == "report":
-        return await card_commands.report(settings)
+        return await card_commands.report(settings, sector=arguments.sector)
     if arguments.action == "redact":
         return await card_commands.redact(settings)
     building = arguments.action == "build"
@@ -297,12 +312,14 @@ async def run_cards(
             budget_usd=arguments.budget_usd,
             concurrency=arguments.concurrency,
             limit=arguments.limit,
+            sector=arguments.sector,
         )
     return await card_commands.judge(
         settings,
         model,
         budget_usd=arguments.budget_usd,
         concurrency=arguments.concurrency,
+        sector=arguments.sector,
     )
 
 
