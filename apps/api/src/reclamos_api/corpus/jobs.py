@@ -9,7 +9,7 @@ import asyncpg
 from reclamos_api.corpus import repository
 from reclamos_api.corpus.chunk import chunk_text
 from reclamos_api.corpus.extract import ExtractionError, extract_text
-from reclamos_api.corpus.parse import parse_resolution
+from reclamos_api.corpus.parse import PARSER_VERSION, parse_resolution
 from reclamos_api.corpus.redact import Redactor
 from reclamos_api.corpus.site import (
     Fetcher,
@@ -249,7 +249,7 @@ class Pipeline:
     async def _parse(self, resolution_id: int) -> None:
         async with self.pool.acquire() as connection:
             row = await repository.get(connection, resolution_id)
-            if row["parsed_at"] is None:
+            if row["parsed_at"] is None or row["parser_version"] != PARSER_VERSION:
                 await repository.record_parse(
                     connection,
                     resolution_id,

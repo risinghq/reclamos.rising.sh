@@ -91,6 +91,13 @@ A step that cannot finish writes `failure_stage`, `failure_reason` and
 failed rows again, and parsing again needs no network, so a better parser can be
 applied to stored text by running `reclamos corpus crawl`.
 
+`parser_version` in `corpus/parse.py` marks which parser wrote the stored
+fields, like `redactor_version` marks the redactor. A change to the parser bumps
+it: the next `reclamos corpus crawl` then re-parses every extracted row,
+including ones the older parser already stored fields for. That is how a parser
+fix reaches rows that never failed — for example an energy row stored with the
+wrong `appeal_kind` — without a new download or a second crawl.
+
 The jobs run in whichever process claims them: the worker
 (`python -m reclamos_api.worker`) or `reclamos corpus crawl`. Only a crawl
 starts the retry of a failure. [Architecture](architecture.md#corpus-state)
@@ -116,6 +123,22 @@ resolution number follows `OS/JARU-`, the operator sits on an
 `Empresa distribuidora:` (or `Empresa:`) line, and the claim sits on `Materia:`.
 A JARU resolution often rules claim by claim in its resolutive section, so
 `mixto` is common; a `NULO`/`NULA`/`NULIDAD` verdict maps to `sin_efecto`.
+
+Not every JARU file is an appeal. A `queja` complains about the procedure
+itself, so it reads the kind from the `Materia:` line or the page summary, and a
+queja gets the claim type `procedural`. A resolution that rules only on the
+procedure — `ACUMULAR`, `SUSPENDER`, `RECTIFICAR`, `CARECE DE OBJETO`,
+`DESESTIMAR` — is read as a procedural ruling: its disposition maps to
+`improcedente` or `sin_efecto` and its claim type is `procedural`.
+
+Newer JARU formats print no `Empresa` line and call the company "la empresa
+distribuidora" throughout. For those, the operator comes from the party named
+after `contra`, or from the `Resolución impugnada` code — `GNLC-RES-*` is the
+first-instance resolution series of Gas Natural de Lima y Callao S.A., and the
+other prefixes in `IMPUGNADA_OPERATORS` work the same way. Only prefixes that
+the labeled rows confirm are mapped, and only the `impugnada` label itself
+counts — a code quoted for another case in the text or footnotes cannot name the
+operator. A queja with no labeled code names no operator and stays missing.
 
 The scan can damage any label, so two fields have a second source. The
 `Empresa:` line on the resolution page, when present, names the operator. The

@@ -180,6 +180,11 @@ ALTER TABLE resolutions
     ADD COLUMN IF NOT EXISTS redactor_version text,
     ADD COLUMN IF NOT EXISTS redacted_at timestamptz;
 
+-- `parser_version` marks the parser that stored the parsed fields, so a
+-- parser change re-runs the step on rows the older one already read.
+ALTER TABLE resolutions
+    ADD COLUMN IF NOT EXISTS parser_version text;
+
 DO $$
 BEGIN
     IF NOT EXISTS (

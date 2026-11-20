@@ -321,3 +321,246 @@ def test_the_page_summary_fills_what_the_scan_lost() -> None:
 )
 def test_reads_the_ruling_the_page_summary_states(summary: str, outcome: str) -> None:
     assert parse_resolution("sin cabecera", summary=summary).outcome == outcome
+
+
+JARU_QUEJA = """\
+RESOLUCIÓN DE LA SALA UNIPERSONAL 1
+JUNTA DE APELACIONES DE RECLAMOS DE USUARIOS
+ORGANISMO SUPERVISOR DE LA INVERSIÓN
+EN ENERGÍA Y MINERÍA
+OSINERGMIN N* 13425-2021-OS/JARU-S1
+Lima, 27 de octubre del 2021
+Expediente: N* 202100215314
+Concesionaria: Gas Natural de Lima y Callao S.A. Cálidda
+Materia: Queja por facturar deuda materia de reclamo, por no elevar expediente
+de apelación y por corte de servicio estando en reclamo
+Suministro: |
+SUMILLA: La queja por facturar deuda materia de reclamo es fundada cuando la
+concesionaria no acreditó que no incluyó indebidamente el importe reclamado en
+un recibo.
+SE RESUELVE:
+Artículo 1". - DECLARAR FUNDADA la queja por facturar deuda materia de reclamo.
+"""
+
+JARU_APPEAL_2021 = """\
+RESOLUCIÓN DE LA SALA UNIPERSONAL 2
+JUNTA DE APELACIONES DE RECLAMOS DE USUARIOS
+ORGANISMO SUPERVISOR DE LA INVERSIÓN
+EN ENERGÍA Y MINERÍA
+OSINERGMIN N? 4-2021 OS/JARU-S2
+Lima, 05 de enero del 2021
+Expediente N* 202000171329
+Usuario: MS
+Materia: Excesivos consumos facturados
+Resolución impugnada: N* GNLC-RES-12681-2020
+SUMILLA: La empresa distribuidora deberá refacturar los consumos de abril,
+mayo y junio de 2020, así como los cargos asociados a estos.
+1. ANTECEDENTES
+1.3. 10 de noviembre de 2020.- La recurrente presentó recurso de apelación
+contra la Resolución N* GNLC-RES-12681-2020.
+SE RESUELVE:
+Artículo 1".- DECLARAR FUNDADO el recurso de apelación.
+"""
+
+
+def test_reads_a_jaru_queja() -> None:
+    parsed = parse_resolution(
+        JARU_QUEJA,
+        summary="Resolución referida a una queja administrativa presentada por "
+        "usuario del servicio de gas natural",
+        sector="energy",
+    )
+
+    assert parsed.missing == []
+    assert parsed.number == "13425-2021-OS/JARU-S1"
+    assert parsed.resolved_on == date(2021, 10, 27)
+    assert parsed.operator == "GAS NATURAL DE LIMA Y CALLAO S.A."
+    assert parsed.appeal_kind == "queja"
+    assert parsed.claim_type == "procedural"
+    assert parsed.outcome == "fundado"
+
+
+def test_reads_a_jaru_appeal_and_the_company_from_the_impugnada_code() -> None:
+    parsed = parse_resolution(JARU_APPEAL_2021, sector="energy")
+
+    assert parsed.missing == []
+    assert parsed.number == "4-2021-OS/JARU-S2"
+    assert parsed.resolved_on == date(2021, 1, 5)
+    assert parsed.operator == "GAS NATURAL DE LIMA Y CALLAO S.A."
+    assert parsed.appeal_kind == "apelacion"
+    assert parsed.subject == "Excesivos consumos facturados"
+    assert parsed.claim_type == "billing"
+    assert parsed.outcome == "fundado"
+
+
+@pytest.mark.parametrize("code", ["GC-RES-306050-2018", "SEAL-RES-123-2018"])
+def test_a_company_code_quoted_for_another_case_is_not_the_operator(
+    code: str,
+) -> None:
+    body = (
+        JARU_APPEAL_2021.replace(
+            "Resolución impugnada: N* GNLC-RES-12681-2020", ""
+        ).replace(
+            "contra la Resolución N* GNLC-RES-12681-2020.",
+            "contra la resolución impugnada.",
+        )
+        + f"\n2 En la Resolución N* {code} este Tribunal resolvió "
+        "un caso distinto."
+    )
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.operator is None
+    assert "operator" in parsed.missing
+
+
+def test_an_appeal_whose_antecedents_mention_a_queja_stays_an_appeal() -> None:
+    body = JARU_APPEAL_2021.replace(
+        "1.3. 10 de noviembre de 2020.- La recurrente presentó recurso de apelación",
+        "1.3. 12 de octubre de 2020.- El usuario presentó queja por aplicación "
+        "de silencio administrativo positivo.\n"
+        "1.4. 10 de noviembre de 2020.- La recurrente presentó recurso de "
+        "apelación",
+    )
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.appeal_kind == "apelacion"
+    assert parsed.claim_type == "billing"
+
+
+def test_reads_a_queja_named_on_the_materia_line_in_quotes() -> None:
+    body = JARU_QUEJA.replace(
+        "Materia: Queja por facturar deuda materia de reclamo, por no elevar "
+        "expediente\nde apelación y por corte de servicio estando en reclamo",
+        "Materia: “Queja”",
+    )
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.appeal_kind == "queja"
+    assert parsed.claim_type == "procedural"
+
+
+def test_reads_the_operator_named_after_contra() -> None:
+    parsed = parse_resolution(
+        JARU_APPEAL_2021.replace(
+            "Resolución impugnada: N* GNLC-RES-12681-2020",
+            "VISTOS: Los expedientes, referidos a los procedimientos de reclamo "
+            "seguidos por Productos Forma S.A.* contra Enel Distribución Perú "
+            "S.A.A.",
+        ),
+        sector="energy",
+    )
+
+    assert parsed.operator == "ENEL DISTRIBUCION PERU S.A.A."
+
+
+@pytest.mark.parametrize(
+    ("ruling", "outcome"),
+    [
+        ("Declarar que CARECE DE OBJETO emitir pronunciamiento", "improcedente"),
+        ("DESESTIMAR el recurso de apelación", "improcedente"),
+        ("Declarar IMPROCEDENTE por extemporáneo el recurso", "improcedente"),
+        ("ACUMULAR los procedimientos de reclamo signados", "sin_efecto"),
+        ("SUSPENDER el procedimiento para recabar información", "sin_efecto"),
+        ("RECTIFICAR el nombre de la Resolución N* 8765-2021", "sin_efecto"),
+    ],
+)
+def test_reads_a_procedural_ruling(ruling: str, outcome: str) -> None:
+    body = JARU_APPEAL_2021.replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        f"Artículo Único.- {ruling}.",
+    ).replace("Materia: Excesivos consumos facturados", "Materia: Medida cautelar")
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.outcome == outcome
+    assert parsed.claim_type == "procedural"
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("Lima,02 de enero de 2019", date(2019, 1, 2)),
+        ("Lima, 27 de octubre\ndel 2021", date(2021, 10, 27)),
+        ("Lima, 20 de\ndiciembre del 2021", date(2021, 12, 20)),
+        ("Lima, 23 de enero 2019", date(2019, 1, 23)),
+    ],
+)
+def test_reads_a_jaru_date_the_scan_broke_up(line: str, expected: date) -> None:
+    body = JARU_APPEAL_2021.replace("Lima, 05 de enero del 2021", line)
+
+    assert parse_resolution(body, sector="energy").resolved_on == expected
+
+
+def test_considerations_are_not_the_ruling() -> None:
+    body = JARU_APPEAL_2021.replace("SE RESUELVE:\n", "").replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        "Considerando que se debe acumular pagos y es extemporáneo.\n"
+        "Artículo 1.- REVOCAR la resolución impugnada.",
+    )
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.outcome is None
+    assert "outcome" in parsed.missing
+    assert parsed.claim_type == "billing"
+
+
+def test_footnotes_before_the_articles_do_not_hide_the_ruling() -> None:
+    body = JARU_APPEAL_2021.replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        "1 Aprobada por Resolución N? 269-2014-0S/CD.\n\n"
+        '2 "37.2 La queja será declarada improcedente cuando el procedimiento '
+        "de reclamo haya concluido o no subsista el\n\n"
+        'defecto de tramitación materia de queja (...)".\n\n'
+        "3 Aprobado por Resolución N* 044-2018-0S/CD.\n\n"
+        "RESOLUCIÓN DE LA SALA UNIPERSONAL 1\n"
+        "Artículo Único. - Declarar IMPROCEDENTE la queja por corte de "
+        "servicio estando en\nreclamo.\nFirmado Digitalmente",
+    )
+
+    assert parse_resolution(body, sector="energy").outcome == "improcedente"
+
+
+@pytest.mark.parametrize(
+    "mention",
+    [
+        "el levantamiento de observaciones",
+        "la acumulación de pagos",
+        "la desestimación del recurso",
+    ],
+)
+def test_a_noun_in_an_article_is_not_a_disposition(mention: str) -> None:
+    body = JARU_APPEAL_2021.replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        f"Artículo 1.- REVOCAR la resolución impugnada y ordenar {mention}.",
+    )
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.outcome is None
+    assert "outcome" in parsed.missing
+
+
+def test_a_footnote_is_not_a_ruling() -> None:
+    body = JARU_APPEAL_2021.replace(
+        'Artículo 1".- DECLARAR FUNDADO el recurso de apelación.',
+        "Artículo 1.- REVOCAR la resolución impugnada.",
+    ) + ("\n3 El levantamiento de observaciones y la acumulación de pagos.")
+
+    parsed = parse_resolution(body, sector="energy")
+
+    assert parsed.outcome is None
+    assert "outcome" in parsed.missing
+
+
+def test_reads_the_ruling_before_the_footnotes() -> None:
+    body = JARU_APPEAL_2021 + (
+        "\n2 Aprobado por Resolución N* 044-2018-OS/CD.\n"
+        "Artículo 1162.- El Margen Comercial se basará en una gestión "
+        "comercial eficiente."
+    )
+
+    assert parse_resolution(body, sector="energy").outcome == "fundado"

@@ -3,7 +3,7 @@ from datetime import date
 from typing import Any, Literal
 
 from reclamos_api.corpus.chunk import Chunk
-from reclamos_api.corpus.parse import Parsed
+from reclamos_api.corpus.parse import PARSER_VERSION, Parsed
 from reclamos_api.corpus.redact import REDACTOR_VERSION
 from reclamos_api.corpus.site import ListedResolution
 from reclamos_api.corpus.sources import Source
@@ -63,7 +63,9 @@ def next_stage(row: Any) -> str | None:
         return "chunk"
     if row["embedded_at"] is None:
         return "embed"
-    if row["parsed_at"] is None:
+    # A parser version that no longer matches re-runs the step on a row the
+    # older parser already stored fields for.
+    if row["parsed_at"] is None or row["parser_version"] != PARSER_VERSION:
         return "parse"
     return None
 
@@ -75,10 +77,12 @@ async def unfinished_ids(connection: Connection) -> list[int]:
         WHERE skipped_reason IS NULL
           AND (downloaded_at IS NULL OR extracted_at IS NULL OR parsed_at IS NULL
            OR chunked_at IS NULL OR embedded_at IS NULL OR redacted_at IS NULL
-           OR redactor_version IS DISTINCT FROM $1)
+           OR redactor_version IS DISTINCT FROM $1
+           OR parser_version IS DISTINCT FROM $2)
         ORDER BY id
         """,
         REDACTOR_VERSION,
+        PARSER_VERSION,
     )
     return [row["id"] for row in rows]
 
@@ -343,7 +347,8 @@ async def record_parse(
             failure_stage = $10::text,
             failure_reason = $11::text,
             failure_detail = $12::text,
-            failed_at = CASE WHEN $9::boolean THEN now() END
+            failed_at = CASE WHEN $9::boolean THEN now() END,
+            parser_version = $13
         WHERE id = $1
         """,
         resolution_id,
@@ -358,6 +363,7 @@ async def record_parse(
         "parse" if failed else None,
         f"no_{parsed.missing[0]}" if failed else None,
         parsed.detail() if failed else None,
+        PARSER_VERSION,
     )
 
 

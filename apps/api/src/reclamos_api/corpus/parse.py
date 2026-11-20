@@ -31,6 +31,10 @@ MONTHS = {
     "diciembre": 12,
 }
 
+# `PARSER_VERSION` marks what filled the parsed fields: a change to the
+# parser bumps it so a crawl re-parses the rows an older parser read.
+PARSER_VERSION = "2"
+
 # These labels end the value of the preceding field.
 _LABELS = (
     r"RECLAMANTE|RECURRENTE|SERVICIO|EMPRESA(?:\s+(?:OPERADORA|DISTRIBUIDORA|"
@@ -111,6 +115,46 @@ _ENERGY_EXPEDIENTE = re.compile(r"EXPEDIENTE\s*N?[°º.]?\s*(\d{12})", re.IGNORE
 _RULING_WORDS = re.compile(
     r"\b(FUNDAD[OA]S?|INFUNDAD[OA]S?|IMPROCEDENTE|NUL[OA]S?|NULIDAD)\b", re.IGNORECASE
 )
+# A ruling written as a disposition, not a verdict word. `CARECE DE OBJETO` and
+# `DESESTIMAR` dismiss the appeal; `ACUMULAR`, `SUSPENDER`, `RECTIFICAR`,
+# `ESTÉSE` and `LEVANTAR` end or move the procedure without ruling a claim.
+# Only verb inflections match: the nouns (`acumulación`, `desestimación`,
+# `levantamiento`, `rectificación`) are excluded, since an article can quote
+# them without ordering anything.
+_PROCEDURAL_DISMISSAL = re.compile(
+    r"CARECE\s+DE\s+OBJETO|DESESTIMA(?!CI[OÓ]N|TORI)\w*|EXTEMPOR[AÁ]NE[OA]S?\b"
+    r"|INADMISIBLES?\b",
+    re.IGNORECASE,
+)
+_PROCEDURAL_RULING = re.compile(
+    r"\b(ACUMULA(?!CI[OÓ]N|MIENTO)\w*|SUSPEND\w*|RECTIFICA(?!CI[OÓ]N)\w*"
+    r"|LEVANTA(?!MIENTO)\w*|EST[EÉ]SE)\b",
+    re.IGNORECASE,
+)
+# The resolutive section anchors on `SE RESUELVE`/`POR LO TANTO`; when none
+# prints, the `Artículo 1` heading is the fallback — matched with its `.`/`-`
+# so a footnote's `Artículo 1162` cannot be the anchor.
+_ARTICLE_ONE = re.compile(r"art[íi]culo\s+1\s*[°º*”\"'“”]?\s*[.\-]", re.IGNORECASE)
+_ARTICLE_LINE = re.compile(r"^\s*art[íi]culo\b", re.IGNORECASE)
+_SIGNATURE = re.compile(r"^\s*(firmado|reg[íi]strese)", re.IGNORECASE)
+# The resolution code of the first instance names the company that issued it,
+# which is the only place the operator appears in resolutions that print no
+# `Empresa`/`Concesionaria` label. Only prefixes that the labeled rows
+# themselves confirm are mapped: `GC` matched Hidrandina cases more often
+# than Electro Dunas, and `SGGC` and `SEL` stay unconfirmed.
+_IMPUGNADA = re.compile(
+    r"[Ii]mpugnada\s*[:\-]?\s*(?:N\s*[°º\*\.“”\"]*\s*)?"
+    r"([A-ZÁÉÍÓÚÑ]{2,10})\s*[-/]"
+)
+IMPUGNADA_OPERATORS = {
+    "GNLC": "GAS NATURAL DE LIMA Y CALLAO S.A.",
+    "GLNC": "GAS NATURAL DE LIMA Y CALLAO S.A.",
+    "DRR": "LUZ DEL SUR S.A.A.",
+    "SGSC": "LUZ DEL SUR S.A.A.",
+    "SEAL": "SOCIEDAD ELECTRICA DEL SUR OESTE S.A.",
+    "GZT": "ELECTRO SUR S.A.",
+    "CQ": "ELECTRO SUR ESTE S.A.",
+}
 # A `NULA` sends the file back to the company without ruling on a claim, like
 # the Tribunal's `sin efecto`.
 _VERDICTS = {
@@ -138,11 +182,17 @@ ENERGY_CLAIM_TYPES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "nuevo suministro",
             "punto de suministro",
             "factibilidad",
+            "instalacion",
+            "habilitacion",
+            "viabilidad",
+            "reubicacion",
+            "reposicion",
+            "electrificacion",
         ),
     ),
     (
         "service_cut",
-        ("corte", "suspension", "reconexion", "baja del suministro"),
+        ("corte", "suspension", "reconexion", "baja del suministro", "retiro"),
     ),
     (
         "service_quality",
@@ -165,7 +215,7 @@ ENERGY_CLAIM_TYPES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("consumption", ("lectura", "consumo", "estimad")),
     (
         "contract_terms",
-        ("contrato", "condiciones contractuales", "clausula"),
+        ("contrato", "condiciones contractuales", "clausula", "titularidad"),
     ),
 )
 
@@ -179,8 +229,8 @@ _EXPEDIENTE = re.compile(
 # The date line, as `Lima, 14 de noviembre del 2017` or, in older resolutions,
 # `Lima, catorce de noviembre del dos mil seis`. `del` is often misread.
 _DATE = re.compile(
-    r"Lima[,.]?[ \t]+([^\W_][\w ]{0,20}?)[ \t]+de[ \t]+([^\W\d_]+)[ \t]+d[^\W\d_]{1,2}[ \t]+"
-    r"(?:año[ \t]+)?([^\n]{3,40})",
+    r"Lima[,.]?[ \t]*([^\W_][\w ]{0,20}?)\s+de\s+([^\W\d_]+?)\s+"
+    r"(?:d[^\W\d_]{1,2}\s+)?(?:año\s+)?([^\n]{3,40})",
     re.IGNORECASE,
 )
 _UNIT_WORDS = (
@@ -272,7 +322,7 @@ def parse_resolution(
     body: str, *, summary: str = "", sector: str = "telecom"
 ) -> Parsed:
     if sector == "energy":
-        return _parse_energy(body)
+        return _parse_energy(body, summary=summary)
     header = body[:HEADER_CHARS]
     parsed = Parsed(
         number=_number(header),
@@ -319,25 +369,32 @@ def claim_type(
     return None
 
 
-def _parse_energy(body: str) -> Parsed:
-    """A JARU resolution's fields. Every JARU file is a user's appeal in
-    second instance, so the kind does not vary."""
+def _parse_energy(body: str, *, summary: str = "") -> Parsed:
+    """A JARU resolution's fields. Most JARU files are a user's appeal in
+    second instance; the rest are a `queja` on the procedure itself or a
+    procedural ruling (an acumulación, a cautelar, a dismissal)."""
     header = body[:HEADER_CHARS]
+    subject = _field(header, r"MATERIAS?")
+    subject = _squash(subject) if subject else None
     parsed = Parsed(
         number=_energy_number(header),
         resolved_on=_date(header),
         operator=_energy_operator(header),
-        appeal_kind="apelacion",
+        appeal_kind=_energy_kind(summary, subject),
     )
-    parsed.subject = _field(header, r"MATERIAS?")
-    parsed.subject = _squash(parsed.subject) if parsed.subject else None
+    parsed.subject = subject
     parsed.outcome = _energy_outcome(body)
     parsed.claim_type = claim_type(
-        parsed.subject or "", appeal_kind="apelacion", types=ENERGY_CLAIM_TYPES
+        parsed.subject or "", appeal_kind=parsed.appeal_kind, types=ENERGY_CLAIM_TYPES
     )
     if parsed.claim_type is None and (
         parsed.outcome == "sin_efecto"
-        or re.search(r"\bmedida\s+cautelar\b", parsed.subject or "", re.IGNORECASE)
+        or _PROCEDURAL_DISMISSAL.search(_article_paragraphs(_resolutive_tail(body)))
+        or re.search(
+            r"cautelar|acumul|reclamo\s+gen[eé]rico|queja",
+            parsed.subject or "",
+            re.IGNORECASE,
+        )
     ):
         parsed.claim_type = "procedural"
 
@@ -366,34 +423,54 @@ def _energy_operator(header: str) -> str | None:
         r"EMPRESA\s+(?:DISTRIBUIDORA|CONCESIONARIA|LICENCIATARIA|PRESTADORA)|"
         r"EMPRESA|CONCESIONARIA",
     )
-    if not value:
-        return None
-    # `Enel Distribución Perú S.A.A. (en adelante, Pluz Energía Perú S.A.A.)`
-    # prints the name the case was brought against first.
-    line = value.splitlines()[0].split("(", 1)[0]
-    name = _squash(_plain(line).upper()).rstrip(" .")
-    if known := _known_operator(_letters(name), ENERGY_OPERATORS):
-        return known
-    suffix = _LEGAL_SUFFIX.search(name)
-    if not suffix:
-        return None
-    name = name[: suffix.end()].rstrip(".") + "."
-    close = get_close_matches(name, ENERGY_OPERATORS, n=1, cutoff=0.85)
-    return close[0] if close else name
+    if value:
+        # `Enel Distribución Perú S.A.A. (en adelante, Pluz Energía Perú S.A.A.)`
+        # prints the name the case was brought against first.
+        line = value.splitlines()[0].split("(", 1)[0]
+        name = _squash(_plain(line).upper()).rstrip(" .")
+        if known := _known_operator(_letters(name), ENERGY_OPERATORS):
+            return known
+        suffix = _LEGAL_SUFFIX.search(name)
+        if suffix:
+            name = name[: suffix.end()].rstrip(".") + "."
+            close = get_close_matches(name, ENERGY_OPERATORS, n=1, cutoff=0.85)
+            return close[0] if close else name
+    # No label prints in many JARU formats. The party named after `contra` is
+    # the company sued, and the impugnada code is the company's own series.
+    if against := re.search(
+        r"\bcontra\s+([A-ZÁÉÍÓÚÑ][^\n]{2,70}?(?:S\.A\.A|S\.A\.C|S\.A|S\.R\.L)"
+        r"\b\.?)",
+        header,
+    ):
+        name = _squash(_plain(against[1]).upper()).rstrip(" .") + "."
+        if known := _known_operator(_letters(name), ENERGY_OPERATORS):
+            return known
+        close = get_close_matches(name, ENERGY_OPERATORS, n=1, cutoff=0.85)
+        return close[0] if close else name
+    if match := _IMPUGNADA.search(header):
+        return IMPUGNADA_OPERATORS.get(_plain(match[1]).upper())
+    return None
+
+
+def _energy_kind(summary: str, subject: str | None) -> str:
+    """Whether the file is an appeal or a queja on the procedure, from the
+    `Materia` line first, then the page summary. The antecedents of an appeal
+    also mention quejas the company mishandled, so the header prose is not a
+    source."""
+    if re.match(r"\W*queja\b", _plain(subject or ""), re.IGNORECASE):
+        return "queja"
+    if re.search(r"\bqueja\b", _plain(summary), re.IGNORECASE):
+        return "queja"
+    return "apelacion"
 
 
 def _energy_outcome(body: str) -> str | None:
     """The verdicts the resolutive articles declare. A JARU resolution rules
     claim by claim, so several verdicts make the outcome `mixto`; a `NULA`
-    sends the file back without ruling on a claim."""
-    start = max(
-        body.rfind("SE RESUELVE"),
-        body.rfind("POR LO TANTO"),
-        body.rfind("Artículo 1"),
-        body.rfind("ARTÍCULO 1"),
-        body.rfind("ARTICULO 1"),
-    )
-    tail = body[start if start >= 0 else -TAIL_CHARS :]
+    sends the file back without ruling on a claim. A procedural disposition —
+    `CARECE DE OBJETO`, `DESESTIMAR`, `ACUMULAR` and the like — is read when
+    no verdict word appears."""
+    tail = _resolutive_tail(body)
     if re.search(r"FUNDAD[OA]S?\s+EN\s+PARTE", tail, re.IGNORECASE):
         return "fundado_en_parte"
     verdicts = {
@@ -402,7 +479,45 @@ def _energy_outcome(body: str) -> str | None:
     }
     if len(verdicts) > 1:
         return "mixto"
-    return next(iter(verdicts), None)
+    if verdicts:
+        return next(iter(verdicts))
+    articles = _article_paragraphs(tail)
+    if _PROCEDURAL_DISMISSAL.search(articles):
+        return "improcedente"
+    if _PROCEDURAL_RULING.search(articles):
+        return "sin_efecto"
+    return None
+
+
+def _resolutive_tail(body: str) -> str:
+    """The text after the resolutive marker — articles, footnotes and
+    signatures as the extractor interleaved them."""
+    start = max(
+        body.rfind("SE RESUELVE"),
+        body.rfind("POR LO TANTO"),
+        body.rfind("RESUELVE:"),
+    )
+    if start < 0 and (match := list(_ARTICLE_ONE.finditer(body))):
+        start = match[-1].start()
+    return body[start if start >= 0 else -TAIL_CHARS :]
+
+
+def _article_paragraphs(tail: str) -> str:
+    """The paragraphs that open an `Artículo` heading, each through its
+    continuation lines up to the next blank line or signature. Footnotes and
+    page headers the extractor interleaved never start one, so the procedural
+    rules cannot read them."""
+    paragraphs: list[list[str]] = []
+    current: list[str] = []
+    for line in tail.splitlines():
+        if _ARTICLE_LINE.match(line):
+            current = [line]
+            paragraphs.append(current)
+        elif not line.strip() or _SIGNATURE.match(line):
+            current = []
+        elif current:
+            current.append(line)
+    return "\n".join(line for paragraph in paragraphs for line in paragraph)
 
 
 def _plain(text: str) -> str:
@@ -452,7 +567,8 @@ def _number_in(text: str) -> int | None:
 
 
 def _year_in(text: str) -> int | None:
-    digits = re.match(r"\s*(\d{4})\b", text)
+    # A glued duplicate (`...del 202120 de mayo del 2021`) keeps the first four.
+    digits = re.match(r"\s*(\d{4})", text)
     if digits:
         return int(digits[1])
     spelled = re.match(r"\s*dos\s+mil\b\s*([^\n.,;]*)", _plain(text), re.IGNORECASE)
